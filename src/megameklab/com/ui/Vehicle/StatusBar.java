@@ -54,7 +54,7 @@ public class StatusBar extends ITab {
     private JLabel tons = new JLabel();
     private JLabel slots = new JLabel();
     private JLabel cost = new JLabel();
-    private EntityVerifier entityVerifier = new EntityVerifier(new File(
+    private EntityVerifier entityVerifier = EntityVerifier.getInstance(new File(
             "data/mechfiles/UnitVerifierOptions.xml"));
     private TestTank testEntity = null;
     private DecimalFormat formatter;
@@ -129,8 +129,8 @@ public class StatusBar extends ITab {
     }
 
     public JLabel tonnageLabel() {
-        float tonnage = getTank().getWeight();
-        float currentTonnage;
+        double tonnage = getTank().getWeight();
+        double currentTonnage;
 
         currentTonnage = testEntity.calculateWeight();
         currentTonnage += UnitUtil.getUnallocatedAmmoTonnage(getTank());
@@ -152,8 +152,8 @@ public class StatusBar extends ITab {
         int walk = getTank().getOriginalWalkMP();
         int run = getTank().getRunMP(true, true, false);
         int jump = getTank().getOriginalJumpMP();
-        float tonnage = getTank().getWeight();
-        float currentTonnage;
+        double tonnage = getTank().getWeight();
+        double currentTonnage;
         int bv = getTank().calculateBattleValue();
 
         if (getTank().isSupportVehicle()) {
@@ -167,7 +167,7 @@ public class StatusBar extends ITab {
         currentTonnage = testEntity.calculateWeight();
 
         currentTonnage += UnitUtil.getUnallocatedAmmoTonnage(getTank());
-        int currentCost = (int)Math.round(getTank().getCost(false));
+        long currentCost = (long) Math.round(getTank().getCost(false));
 
         tons.setText("Tonnage: " + currentTonnage + "/" + tonnage);
         tons.setToolTipText("Current Tonnage/Max Tonnage");
@@ -219,7 +219,7 @@ public class StatusBar extends ITab {
         if (fDialog.getFile() != null) {
             String relativeFilePath = new File(fDialog.getDirectory() + fDialog.getFile()).getAbsolutePath();
             relativeFilePath = "." + File.separatorChar + relativeFilePath.substring(new File(System.getProperty("user.dir").toString()).getAbsolutePath().length() + 1);
-            getMech().getFluff().setMMLImagePath(relativeFilePath);
+            getTank().getFluff().setMMLImagePath(relativeFilePath);
         }
         refresh.refreshPreview();
         return;

@@ -27,13 +27,15 @@ import javax.swing.SwingConstants;
 
 import megamek.common.Entity;
 import megamek.common.EquipmentType;
+import megamek.common.ITechManager;
 import megamek.common.Infantry;
 import megamek.common.LocationFullException;
 import megamek.common.TechConstants;
 import megamek.common.weapons.infantry.InfantryWeapon;
 import megameklab.com.ui.MegaMekLabMainUI;
-import megameklab.com.ui.Infantry.tabs.PreviewTab;
+import megameklab.com.ui.tabs.PreviewTab;
 import megameklab.com.ui.Infantry.tabs.StructureTab;
+import megameklab.com.ui.tabs.FluffTab;
 import megameklab.com.util.MenuBarCreator;
 
 public class MainUI extends MegaMekLabMainUI {
@@ -45,6 +47,7 @@ public class MainUI extends MegaMekLabMainUI {
 
     StructureTab structureTab;
     PreviewTab previewTab;
+    FluffTab fluffTab;
     StatusBar statusbar;
     JTabbedPane ConfigPane = new JTabbedPane(SwingConstants.TOP);
     JPanel masterPanel = new JPanel();
@@ -54,7 +57,7 @@ public class MainUI extends MegaMekLabMainUI {
     public MainUI() {
 
         super();
-        createNewUnit(Entity.ETYPE_INFANTRY, false);
+        createNewUnit(Entity.ETYPE_INFANTRY);
         setTitle(getEntity().getChassis() + " " + getEntity().getModel() + ".mtf");
         menubarcreator = new MenuBarCreator(this);
         setJMenuBar(menubarcreator);
@@ -81,11 +84,14 @@ public class MainUI extends MegaMekLabMainUI {
 
         statusbar = new StatusBar(this);
         structureTab = new StructureTab(this);
+        fluffTab = new FluffTab(this);
         previewTab = new PreviewTab(this);
 
         structureTab.addRefreshedListener(this);
+        fluffTab.setRefreshedListener(this);
 
         ConfigPane.addTab("Build", structureTab);
+        ConfigPane.addTab("Fluff", fluffTab);
         ConfigPane.addTab("Preview", previewTab);
 
         masterPanel.add(ConfigPane, BorderLayout.CENTER);
@@ -96,7 +102,7 @@ public class MainUI extends MegaMekLabMainUI {
     }
 
     @Override
-    public void createNewUnit(long entityType, boolean isSuperHeavy) {
+    public void createNewUnit(long entityType, boolean isPrimitive, boolean isIndustrial, Entity oldEntity) {
         setEntity(new Infantry());
         getEntity().setYear(3145);
         getEntity().setTechLevel(TechConstants.T_IS_TW_NON_BOX);
@@ -138,7 +144,15 @@ public class MainUI extends MegaMekLabMainUI {
     }
 
     @Override
+    public void refreshTransport() {
+        // not used for infantry
+    }
+
+    @Override
     public void refreshHeader() {
+        String title = getEntity().getChassis() + " " + getEntity().getModel()
+                + ".blk";
+        setTitle(title);
 
     }
 
@@ -161,6 +175,23 @@ public class MainUI extends MegaMekLabMainUI {
     @Override
     public void refreshPreview() {
         previewTab.refresh();
+    }
+
+    @Override
+    public void refreshSummary() {
+    }
+
+    @Override
+    public void refreshEquipmentTable() {
+        structureTab.refreshEquipmentTable();
+    }
+
+    @Override
+    public ITechManager getTechManager() {
+        if (null != structureTab) {
+            return structureTab.getTechManager();
+        }
+        return null;
     }
 
 }

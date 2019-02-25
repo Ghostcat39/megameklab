@@ -111,10 +111,7 @@ public class BuildView extends IView implements ActionListener, MouseListener {
             }
         }
         for (Mounted mount : getTank().getAmmo()) {
-            int ammoType = ((AmmoType)mount.getType()).getAmmoType();
-            if ((mount.getLocation() == Entity.LOC_NONE) &&
-                    (mount.getUsableShotsLeft() > 1
-                            || ammoType == AmmoType.T_CRUISE_MISSILE )) {
+            if ((mount.getLocation() == Entity.LOC_NONE) && !mount.isOneShotAmmo()) {
                 masterEquipmentList.add(mount);
             }
         }
@@ -238,21 +235,24 @@ public class BuildView extends IView implements ActionListener, MouseListener {
             JMenuItem item;
 
             final int selectedRow = equipmentTable.rowAtPoint(e.getPoint());
+            Mounted mount = (Mounted)equipmentTable.getModel().getValueAt(selectedRow, CriticalTableModel.EQUIPMENT);
             String[] locations;
 
             locations = getTank().getLocationNames();
 
             for (int location = 0; location < getTank().locations(); location++) {
 
-                item = new JMenuItem("Add to " + locations[location]);
+            	if (UnitUtil.isValidLocation(getTank(), mount.getType(), location)) {
+            		item = new JMenuItem("Add to " + locations[location]);
+                    final int loc = location;
+                    item.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            jMenuLoadComponent_actionPerformed(loc, selectedRow);
+                        }
+                    });
+                    popup.add(item);
+            	}
 
-                final int loc = location;
-                item.addActionListener(new ActionListener() {
-                    public void actionPerformed(ActionEvent e) {
-                        jMenuLoadComponent_actionPerformed(loc, selectedRow);
-                    }
-                });
-                popup.add(item);
             }
 
             popup.show(this, e.getX(), e.getY());

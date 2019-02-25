@@ -99,18 +99,18 @@ public class CriticalView extends IView {
                 TitledBorder.TOP, TitledBorder.DEFAULT_POSITION));
         mainPanel.add(middlePanel);
 
-        if (getTank().isSuperHeavy() && !(getTank() instanceof VTOL)) {
-            middlePanel2.add(rearLeftPanel);
-            rearLeftPanel.setBorder(BorderFactory.createTitledBorder(
-                    BorderFactory.createEmptyBorder(), "Rear Left Side",
-                    TitledBorder.TOP, TitledBorder.DEFAULT_POSITION));
-            middlePanel2.add(new JPanel());
-            middlePanel2.add(rearRightPanel);
-            rearRightPanel.setBorder(BorderFactory.createTitledBorder(
-                    BorderFactory.createEmptyBorder(), "Rear Right Side",
-                    TitledBorder.TOP, TitledBorder.DEFAULT_POSITION));
-            mainPanel.add(middlePanel2);
-        }
+        middlePanel2.add(rearLeftPanel);
+        rearLeftPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createEmptyBorder(), "Rear Left Side",
+                TitledBorder.TOP, TitledBorder.DEFAULT_POSITION));
+        middlePanel2.add(new JPanel());
+        middlePanel2.add(rearRightPanel);
+        rearRightPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createEmptyBorder(), "Rear Right Side",
+                TitledBorder.TOP, TitledBorder.DEFAULT_POSITION));
+        mainPanel.add(middlePanel2);
+
+        middlePanel2.setVisible(getTank().isSuperHeavy() && !(getTank() instanceof VTOL));
 
         rearPanel.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createEmptyBorder(), "Rear", TitledBorder.TOP,
@@ -278,6 +278,9 @@ public class CriticalView extends IView {
                         case VTOL.LOC_ROTOR:
                             turretPanel.add(criticalSlotList);
                             break;
+                        case VTOL.LOC_TURRET:
+                            dualTurretPanel.add(criticalSlotList);
+                            break;
                     }
                 } else {
                     switch (location) {
@@ -311,6 +314,7 @@ public class CriticalView extends IView {
                     }
                 }
             }
+            middlePanel2.setVisible(getTank().isSuperHeavy() && !(getTank() instanceof VTOL));
             frontPanel.repaint();
             bodyPanel.repaint();
             leftPanel.repaint();

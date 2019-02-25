@@ -30,12 +30,15 @@ import megamek.common.ConvFighter;
 import megamek.common.Engine;
 import megamek.common.Entity;
 import megamek.common.EquipmentType;
+import megamek.common.ITechManager;
+import megamek.common.SimpleTechLevel;
 import megamek.common.TechConstants;
 import megameklab.com.ui.MegaMekLabMainUI;
 import megameklab.com.ui.Aero.tabs.BuildTab;
 import megameklab.com.ui.Aero.tabs.EquipmentTab;
-import megameklab.com.ui.Aero.tabs.PreviewTab;
 import megameklab.com.ui.Aero.tabs.StructureTab;
+import megameklab.com.ui.tabs.FluffTab;
+import megameklab.com.ui.tabs.PreviewTab;
 import megameklab.com.util.MenuBarCreator;
 
 public class MainUI extends MegaMekLabMainUI {
@@ -53,15 +56,16 @@ public class MainUI extends MegaMekLabMainUI {
     private EquipmentTab equipmentTab;
     private PreviewTab previewTab;
     private BuildTab buildTab;
+    private FluffTab fluffTab;
     private StatusBar statusbar;
     JPanel masterPanel = new JPanel();
     JScrollPane scroll = new JScrollPane();
     private MenuBarCreator menubarcreator;
 
-    public MainUI() {
+    public MainUI(boolean primitive) {
 
         super();
-        createNewUnit(Entity.ETYPE_AERO, false);
+        createNewUnit(Entity.ETYPE_AERO, primitive);
         setTitle(getEntity().getChassis() + " " + getEntity().getModel() + ".blk");
         menubarcreator = new MenuBarCreator(this);
         setJMenuBar(menubarcreator);
@@ -94,14 +98,17 @@ public class MainUI extends MegaMekLabMainUI {
         statusbar = new StatusBar(this);
         equipmentTab = new EquipmentTab(this);
         buildTab = new BuildTab(this, equipmentTab);
+        fluffTab = new FluffTab(this);
         structureTab.addRefreshedListener(this);
         equipmentTab.addRefreshedListener(this);
         buildTab.addRefreshedListener(this);
+        fluffTab.setRefreshedListener(this);
         statusbar.addRefreshedListener(this);
 
         configPane.addTab("Structure/Armor", structureTab);
         configPane.addTab("Equipment", equipmentTab);
         configPane.addTab("Assign Criticals", buildTab);
+        configPane.addTab("Fluff", fluffTab);
         configPane.addTab("Preview", previewTab);
 
         masterPanel.add(configPane, BorderLayout.CENTER);
@@ -112,7 +119,7 @@ public class MainUI extends MegaMekLabMainUI {
     }
 
     @Override
-    public void createNewUnit(long entityType, boolean isSuperHeavy) {
+    public void createNewUnit(long entityType, boolean isPrimitive, boolean isIndustrial, Entity oldEntity) {
 
         if (entityType == Entity.ETYPE_AERO) {
             setEntity(new Aero());
@@ -127,40 +134,45 @@ public class MainUI extends MegaMekLabMainUI {
 
         Aero aero = (Aero) getEntity();
 
-        getEntity().setYear(3145);
-        getEntity().setWeight(25);
+        aero.setYear(3145);
+        aero.setWeight(25);
         aero.setEngine(new Engine(25, Engine.NORMAL_ENGINE, 0));
-        getEntity().setArmorType(EquipmentType.T_ARMOR_STANDARD);
-        getEntity().setArmorTechLevel(getEntity().getTechLevel());
-        getEntity().setStructureType(EquipmentType.T_STRUCTURE_STANDARD);
+        if (isPrimitive) {
+            aero.setCockpitType(Aero.COCKPIT_PRIMITIVE);
+            aero.setArmorType(EquipmentType.T_ARMOR_PRIMITIVE_FIGHTER);
+        } else {
+            aero.setArmorType(EquipmentType.T_ARMOR_STANDARD);
+        }
+        aero.setArmorTechLevel(getEntity().getTechLevel());
+        aero.setStructureType(EquipmentType.T_STRUCTURE_STANDARD);
 
         aero.setHeatSinks(10);
         aero.setHeatType(Aero.HEAT_SINGLE);
 
-        getEntity().autoSetInternal();
+        aero.autoSetInternal();
         for (int loc = 0; loc < getEntity().locations(); loc++) {
             aero.initializeArmor(0, loc);
         }
 
-        getEntity().setChassis("New");
-        getEntity().setModel("Aero");
+        if (null == oldEntity) {
+            getEntity().setChassis("New");
+            getEntity().setModel("Aero");
+        } else {
+            aero.setChassis(oldEntity.getChassis());
+            aero.setModel(oldEntity.getModel());
+            aero.setYear(Math.max(oldEntity.getYear(),
+                    aero.getConstructionTechAdvancement().getIntroductionDate()));
+            aero.setSource(oldEntity.getSource());
+            aero.setManualBV(oldEntity.getManualBV());
+            SimpleTechLevel lvl = SimpleTechLevel.max(aero.getStaticTechLevel(),
+                    SimpleTechLevel.convertCompoundToSimple(oldEntity.getTechLevel()));
+            aero.setTechLevel(lvl.getCompoundTechLevel(oldEntity.isClan()));
+            aero.setMixedTech(oldEntity.isMixedTech());
+        }
     }
 
     @Override
     public void refreshAll() {
-
-//        String model = getEntity().getModel();
-//        String chassis = getEntity().getChassis();
-//
-//        createNewUnit(Entity.ETYPE_AERO, false);
-//
-//        getEntity().setChassis(chassis);
-//        getEntity().setModel(model);
-//
-//        reloadTabs();
-//        repaint();
-//        refreshAll();
-
         statusbar.refresh();
         structureTab.refresh();
         equipmentTab.refresh();
@@ -181,6 +193,11 @@ public class MainUI extends MegaMekLabMainUI {
     public void refreshEquipment() {
         equipmentTab.refresh();
 
+    }
+
+    @Override
+    public void refreshTransport() {
+        // not used for fighters
     }
 
     @Override
@@ -209,6 +226,21 @@ public class MainUI extends MegaMekLabMainUI {
 
     @Override
     public void refreshWeapons() {
+    }
+    
+    @Override
+    public void refreshSummary() {
+        structureTab.refreshSummary();
+    }
+    
+    @Override
+    public void refreshEquipmentTable() {
+        equipmentTab.refreshTable();
+    }
+
+    @Override
+    public ITechManager getTechManager() {
+        return structureTab.getTechManager();
     }
 
 }

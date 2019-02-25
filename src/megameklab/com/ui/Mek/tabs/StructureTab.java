@@ -20,581 +20,123 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.Insets;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
-import javax.swing.AbstractSpinnerModel;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JSpinner;
-import javax.swing.JTextField;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
-import megamek.client.ui.GBC;
 import megamek.common.CriticalSlot;
 import megamek.common.Engine;
 import megamek.common.Entity;
 import megamek.common.EquipmentType;
+import megamek.common.ITechManager;
 import megamek.common.LandAirMech;
 import megamek.common.LocationFullException;
 import megamek.common.Mech;
+import megamek.common.MechFileParser;
 import megamek.common.MiscType;
 import megamek.common.Mounted;
-import megamek.common.QuadMech;
+import megamek.common.QuadVee;
+import megamek.common.SimpleTechLevel;
 import megamek.common.TechConstants;
-import megamek.common.TripodMech;
-import megamek.common.verifier.EntityVerifier;
+import megamek.common.loaders.EntityLoadingException;
 import megamek.common.verifier.TestEntity;
-import megamek.common.verifier.TestMech;
 import megameklab.com.ui.EntitySource;
-import megameklab.com.ui.Mek.views.ArmorView;
 import megameklab.com.ui.Mek.views.SummaryView;
+import megameklab.com.ui.view.ArmorAllocationView;
+import megameklab.com.ui.view.BasicInfoView;
+import megameklab.com.ui.view.HeatSinkView;
+import megameklab.com.ui.view.MVFArmorView;
+import megameklab.com.ui.view.MekChassisView;
+import megameklab.com.ui.view.MovementView;
+import megameklab.com.ui.view.PatchworkArmorView;
+import megameklab.com.ui.view.listeners.MekBuildListener;
 import megameklab.com.util.ITab;
 import megameklab.com.util.RefreshListener;
 import megameklab.com.util.UnitUtil;
 
-public class StructureTab extends ITab implements ActionListener, KeyListener,
-        ChangeListener, ItemListener {
-
-    /**
-     * There are certain cases where the number we want to display in a JSpinner
-     * for jump MP doesn't necessarily reflect the actual value. For instance,
-     * partial wings are similar to MASC in that they add additional Jump MP
-     * beyond the number of jump jets. We need a way to convey this information
-     * to the user, so we want a model that can return a value different from
-     * the actually underlying number of jump jets.
-     * 
-     * @author arlith
-     *
-     */
-    private class JumpSpinnerModel extends AbstractSpinnerModel {
-        
-        /**
-         * 
-         */
-        private static final long serialVersionUID = -7105656717682056365L;
-        
-        Mech mech;
-        int numJets;
-        int maxJets;
-        
-        public JumpSpinnerModel(Mech mech) {
-            super();
-            this.mech = mech;
-            maxJets = 25;            
-        }
-
-        @Override
-        public Object getNextValue() {
-            int newJets = Math.min(maxJets, numJets + 1);
-            Mounted pWingMount = null;
-            for (Mounted m : mech.getMisc()) {
-                if (m.getType().hasFlag(MiscType.F_PARTIAL_WING)) {
-                    pWingMount = m;
-                }
-            }
-            if ((pWingMount != null) && (newJets > 0)) {
-                int totalJumpMP = numJets
-                        + mech.getPartialWingJumpBonus(pWingMount);
-                return "(" + newJets + ") " + totalJumpMP;
-            }
-            return newJets + "";
-        }
-
-        @Override
-        public Object getPreviousValue() {
-            int newJets = Math.max(0, numJets - 1);
-            Mounted pWingMount = null;
-            for (Mounted m : mech.getMisc()) {
-                if (m.getType().hasFlag(MiscType.F_PARTIAL_WING)) {
-                    pWingMount = m;
-                }
-            }
-            if ((pWingMount != null) && (newJets > 0)) {
-                int totalJumpMP = numJets
-                        + mech.getPartialWingJumpBonus(pWingMount);
-                return "(" + newJets + ") " + totalJumpMP;
-            }
-            return newJets + "";
-        }
-
-        @Override
-        public Object getValue() {
-            Mounted pWingMount = null;
-            for (Mounted m : mech.getMisc()) {
-                if (m.getType().hasFlag(MiscType.F_PARTIAL_WING)) {
-                    pWingMount = m;
-                }
-            }
-            if ((pWingMount != null) && (numJets > 0)) {
-                int totalJumpMP = numJets
-                        + mech.getPartialWingJumpBonus(pWingMount);
-                return "(" + numJets + ") " + totalJumpMP;
-            }
-            return numJets + "";
-        }
-
-        @Override
-        public void setValue(Object v) {
-            if (v instanceof Integer) {
-                numJets = (Integer)v;
-            } else if (v instanceof String) {
-                String s = (String) v;
-                int parenIdxLeft = s.indexOf('(');
-                int parenIdxRight = s.indexOf(')');
-                if (parenIdxLeft == -1) {
-                    numJets = Integer.parseInt(s);
-                } else {
-                    numJets = Integer.parseInt(s.substring(parenIdxLeft + 1, parenIdxRight));
-                }
-            } else {
-            }
-            fireStateChanged();
-        }
-
-        public int getNumJets() {
-            return numJets;
-        }
-
-        public void setMaximum(int max) {
-            maxJets = max;
-        }
-        
-        public int getMaximum() {
-            return maxJets;
-        }
-        
-    }
+public class StructureTab extends ITab implements MekBuildListener {
     /**
      *
      */
     private static final long serialVersionUID = -6756011847500605874L;
 
-    private static final String ENGINESTANDARD = "Standard";
-    private static final String ENGINEXL = "XL";
-    private static final String ENGINELIGHT = "Light";
-    private static final String ENGINECOMPACT = "Compact";
-    private static final String ENGINEFISSION = "Fission";
-    private static final String ENGINEFUELCELL = "Fuel Cell";
-    private static final String ENGINEXXL = "XXL";
-    private static final String ENGINEICE = "I.C.E";
+    private BasicInfoView panBasicInfo;
+    private MekChassisView panChassis;
+    private MVFArmorView panArmor;
+    private MovementView panMovement;
+    private HeatSinkView panHeat;
+    private SummaryView panSummary;
+    private ArmorAllocationView panArmorAllocation;
+    private PatchworkArmorView panPatchwork;
 
-    String[] isEngineTypes = { ENGINESTANDARD, ENGINEXL, ENGINELIGHT,
-            ENGINECOMPACT, ENGINEFISSION, ENGINEFUELCELL, ENGINEXXL, ENGINEICE };
-    String[] isIndustrialEngineTypes = { ENGINESTANDARD, ENGINEICE,
-            ENGINEFUELCELL, ENGINEFISSION };
-    String[] clanEngineTypes = { ENGINESTANDARD, ENGINEXL, ENGINEFUELCELL,
-            ENGINEXXL, ENGINEICE };
-    String[] clanIndustrialEngineTypes = { ENGINESTANDARD, ENGINEICE,
-            ENGINEFUELCELL, ENGINEFISSION };
-    String[] isSuperHeavyEngineTypes = { ENGINESTANDARD, ENGINEXL, ENGINELIGHT,
-            ENGINECOMPACT, ENGINEXXL };
-    private int clanEngineFlag = 0;
-    private int superHeavyEngineFlag = 0;
-
-    JPanel panInfo;
-    JPanel panChassis;
-    JPanel panArmor;
-    JPanel panMovement;
-    JPanel panHeat;
-    SummaryView panSummary;
-
-    private ArmorView armor;
-
-    JComboBox<String> engineType = new JComboBox<String>(isEngineTypes);
-    String[] enhancements = { "None", "MASC", "TSM" };
-    JComboBox<String> enhancement = new JComboBox<String>(enhancements);
-    JSpinner walkMP;
-    JTextField runMP;
-    JSpinner jumpMP;
-    JumpSpinnerModel jumpModel;
-    JComboBox<String> gyroType = new JComboBox<String>(Mech.GYRO_SHORT_STRING);
-    JSpinner weightClass;
-    JComboBox<String> cockpitType = new JComboBox<String>(
-            Mech.COCKPIT_SHORT_STRING);
-    String[] clanHeatSinkTypes = { "Single", "Double", "Laser" };
-    String[] isHeatSinkTypes = { "Single", "Double", "Compact" };
-    JComboBox<String> heatSinkType = new JComboBox<String>(isHeatSinkTypes);
-    JSpinner heatSinkNumber;
-    JSpinner baseChassisHeatSinks;
-    String[] techTypes = { "Inner Sphere", "Clan", "Mixed Inner Sphere",
-            "Mixed Clan" };
-    JComboBox<String> techType = new JComboBox<String>(techTypes);
-    String[] isTechLevels = { "Introductory", "Standard", "Advanced",
-            "Experimental", "Unoffical" };
-    String[] clanTechLevels = { "Standard", "Advanced", "Experimental",
-            "Unoffical" };
-    String[] motiveTypes = { "Biped", "Quad", "Tripod" };
-    JComboBox<String> motiveType = new JComboBox<String>(motiveTypes);
-    JComboBox<String> techLevel = new JComboBox<String>(isTechLevels);
-    String[] jjTypes = { "Standard", "Improved", "Prototype",
-            "Mechanical Boosters", "Improved Prototype" };
-    JComboBox<String> jjType = new JComboBox<String>(jjTypes);
-    JTextField era = new JTextField(3);
-    JTextField source = new JTextField(3);
     RefreshListener refresh = null;
-    JCheckBox omniCB = new JCheckBox("Omni");
-    JCheckBox lamCB = new JCheckBox("LAM");
-    JCheckBox fullHeadEjectCB = new JCheckBox("Full Head Ejection");
-    JComboBox<String> structureCombo = new JComboBox<String>(
-            EquipmentType.structureNames);
     JPanel masterPanel;
-    JTextField manualBV = new JTextField(3);
-    private JTextField chassis = new JTextField(5);
-    private JTextField model = new JTextField(5);
-    private JLabel lblFreeSinks = new JLabel("");
-
-    private JComboBox<String> armorCombo = new JComboBox<String>();
-    private JButton maximizeArmorButton = new JButton("Maximize Armor");
-    private JButton unusedTonnageArmorButton = new JButton("Use Remaining Tonnage");
-    private JSpinner armorTonnage;
 
     public StructureTab(EntitySource eSource) {
         super(eSource);
-        armor = new ArmorView(eSource);
         setLayout(new BorderLayout());
         setUpPanels();
         this.add(masterPanel, BorderLayout.CENTER);
-        populateChoices(false);
         refresh();
     }
 
     private void setUpPanels() {
         masterPanel = new JPanel(new GridBagLayout());
-        panInfo = new JPanel(new GridBagLayout());
-        panChassis = new JPanel(new GridBagLayout());
-        panArmor = new JPanel(new GridBagLayout());
-        panMovement = new JPanel(new GridBagLayout());
-        panHeat = new JPanel(new GridBagLayout());
+        panBasicInfo = new BasicInfoView(getMech().getConstructionTechAdvancement());
+        panChassis = new MekChassisView(panBasicInfo);
+        panArmor = new MVFArmorView(panBasicInfo);
+        panMovement = new MovementView(panBasicInfo);
+        panHeat = new HeatSinkView(panBasicInfo);
+        panArmorAllocation = new ArmorAllocationView(panBasicInfo, Entity.ETYPE_MECH);
+        panPatchwork = new PatchworkArmorView(panBasicInfo);
         panSummary = new SummaryView(eSource);
+        if (getMech().hasPatchworkArmor()) {
+            panArmorAllocation.showPatchwork(true);
+        } else {
+            panPatchwork.setVisible(false);
+        }
 
         GridBagConstraints gbc;
 
-        Dimension spinnerSize = new Dimension(55, 25);
-
-        walkMP = new JSpinner(new SpinnerNumberModel(1, 1, 25, 1));
-        ((JSpinner.DefaultEditor) walkMP.getEditor()).setSize(spinnerSize);
-        ((JSpinner.DefaultEditor) walkMP.getEditor())
-                .setMaximumSize(spinnerSize);
-        ((JSpinner.DefaultEditor) walkMP.getEditor())
-                .setPreferredSize(spinnerSize);
-        ((JSpinner.DefaultEditor) walkMP.getEditor())
-                .setMinimumSize(spinnerSize);
-        runMP = new JTextField();
-        runMP.setEditable(false);
-        setFieldSize(runMP, new Dimension(60, 25));
-        runMP.setHorizontalAlignment(SwingConstants.RIGHT);
-
-        jumpModel = new JumpSpinnerModel(getMech());
-        jumpMP = new JSpinner(jumpModel);
-        JSpinner.DefaultEditor jumpEditor = ((JSpinner.DefaultEditor) jumpMP
-                .getEditor());
-        jumpEditor.setSize(spinnerSize);
-        jumpEditor.setMaximumSize(spinnerSize);
-        jumpEditor.setPreferredSize(spinnerSize);
-        jumpEditor.setMinimumSize(spinnerSize);
-
-        weightClass = new JSpinner(new SpinnerNumberModel(20, 10, 100, 5));
-
-        heatSinkNumber = new JSpinner(new SpinnerNumberModel(0, 0, 100, 1));
-        spinnerSize = new Dimension(40, 25);
-        ((JSpinner.DefaultEditor) heatSinkNumber.getEditor())
-                .setSize(spinnerSize);
-        ((JSpinner.DefaultEditor) heatSinkNumber.getEditor())
-                .setMaximumSize(spinnerSize);
-        ((JSpinner.DefaultEditor) heatSinkNumber.getEditor())
-                .setPreferredSize(spinnerSize);
-        ((JSpinner.DefaultEditor) heatSinkNumber.getEditor())
-                .setMinimumSize(spinnerSize);
-
-        baseChassisHeatSinks = new JSpinner(new SpinnerNumberModel(0, 0, 100, 1));
-        ((JSpinner.DefaultEditor) baseChassisHeatSinks.getEditor())
-                .setSize(spinnerSize);
-        ((JSpinner.DefaultEditor) baseChassisHeatSinks.getEditor())
-                .setMaximumSize(spinnerSize);
-        ((JSpinner.DefaultEditor) baseChassisHeatSinks.getEditor())
-                .setPreferredSize(spinnerSize);
-        ((JSpinner.DefaultEditor) baseChassisHeatSinks.getEditor())
-                .setMinimumSize(spinnerSize);
-
-        armorTonnage = new JSpinner(new SpinnerNumberModel(
-                getMech().getArmorWeight(), 0.0,
-                UnitUtil.getMaximumArmorTonnage(getMech()), 0.5));
-        spinnerSize = new Dimension(45, 25);
-        ((JSpinner.DefaultEditor) armorTonnage.getEditor())
-                .setSize(spinnerSize);
-        ((JSpinner.DefaultEditor) armorTonnage.getEditor())
-                .setMaximumSize(spinnerSize);
-        ((JSpinner.DefaultEditor) armorTonnage.getEditor())
-                .setPreferredSize(spinnerSize);
-        ((JSpinner.DefaultEditor) armorTonnage.getEditor())
-                .setMinimumSize(spinnerSize);
-
-        // lblFreeSinks.setFont(new Font(lblFreeSinks.getName(), Font.PLAIN,
-        // 10));
-
-        chassis.setText(getMech().getChassis());
-        model.setText(getMech().getModel());
-
-        Dimension labelSize = new Dimension(110, 25);
-        gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.fill = java.awt.GridBagConstraints.HORIZONTAL;
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.insets = new Insets(0, 0, 1, 2);
-        panInfo.add(createLabel("Chassis:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        panInfo.add(chassis, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        panInfo.add(createLabel("Model:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        panInfo.add(model, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        panInfo.add(createLabel("Year:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 2;
-        panInfo.add(era, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 3;
-        panInfo.add(createLabel("Source/Era:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 3;
-        panInfo.add(source, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 4;
-        panInfo.add(createLabel("Tech:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 4;
-        panInfo.add(techType, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 5;
-        panInfo.add(createLabel("Tech Level:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 5;
-        panInfo.add(techLevel, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 6;
-        panInfo.add(createLabel("Manual BV:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 6;
-        panInfo.add(manualBV, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        panChassis.add(createLabel("Tonnage:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        panChassis.add(weightClass, gbc);
-        gbc.gridx = 2;
-        gbc.gridy = 0;
-        panChassis.add(omniCB, gbc);
-        gbc.gridx = 3;
-        gbc.gridy = 0;
-        panChassis.add(lamCB, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        panChassis.add(createLabel("Motive Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        gbc.gridwidth = 3;
-        panChassis.add(motiveType, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.gridwidth = 1;
-        panChassis.add(createLabel("Structure Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 2;
-        gbc.gridwidth = 3;
-        panChassis.add(structureCombo, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 3;
-        gbc.gridwidth = 1;
-        panChassis.add(createLabel("Engine Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 3;
-        gbc.gridwidth = 3;
-        panChassis.add(engineType, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 4;
-        gbc.gridwidth = 1;
-        panChassis.add(createLabel("Gyro Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 4;
-        gbc.gridwidth = 3;
-        panChassis.add(gyroType, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 5;
-        gbc.gridwidth = 1;
-        panChassis.add(createLabel("Cockpit Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 5;
-        gbc.gridwidth = 3;
-        panChassis.add(cockpitType, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 6;
-        gbc.gridwidth = 1;
-        panChassis.add(createLabel("Enhancements:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 6;
-        gbc.gridwidth = 3;
-        panChassis.add(enhancement, gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 7;
-        gbc.gridwidth = 3;
-        panChassis.add(fullHeadEjectCB, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.gridwidth = 1;
-        panArmor.add(createLabel("Armor Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        gbc.gridwidth = 2;
-        panArmor.add(armorCombo, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        gbc.gridwidth = 1;
-        panArmor.add(createLabel("Armor Tonnage:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        panArmor.add(armorTonnage, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.gridwidth = 3;
-        panArmor.add(maximizeArmorButton, gbc);
-        
-        gbc.gridx = 0;
-        gbc.gridy = 3;
-        gbc.gridwidth = 3;
-        panArmor.add(unusedTonnageArmorButton, gbc);
-        
-
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.gridwidth = 1;
-        panMovement.add(createLabel("Walking MP:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        gbc.fill = java.awt.GridBagConstraints.NONE;
-        panMovement.add(walkMP, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        panMovement.add(createLabel("Running MP:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        panMovement.add(runMP, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        panMovement.add(createLabel("Jumping MP:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 2;
-        panMovement.add(jumpMP, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 3;
-        panMovement.add(createLabel("Jump Jet Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 3;
-        gbc.fill = java.awt.GridBagConstraints.HORIZONTAL;
-        panMovement.add(jjType, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        panHeat.add(createLabel("Sink Type:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        gbc.gridwidth = 2;
-        gbc.fill = java.awt.GridBagConstraints.HORIZONTAL;
-        gbc.anchor = GridBagConstraints.WEST;
-        panHeat.add(heatSinkType, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        gbc.gridwidth = 1;
-        panHeat.add(createLabel("Number:", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        gbc.fill = java.awt.GridBagConstraints.NONE;
-        panHeat.add(heatSinkNumber, gbc);
-        gbc.gridx = 2;
-        gbc.gridy = 1;
-        panHeat.add(lblFreeSinks, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        panHeat.add(createLabel("Base (Omni):", labelSize), gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 2;
-        panHeat.add(baseChassisHeatSinks, gbc);
-
-        Dimension comboSize = new Dimension(180, 25);
-
-        setFieldSize(era, comboSize);
-        setFieldSize(manualBV, comboSize);
-        setFieldSize(source, comboSize);
-        setFieldSize(techType, comboSize);
-        setFieldSize(armorCombo, comboSize);
-        setFieldSize(techLevel, comboSize);
-        setFieldSize(heatSinkType, comboSize);
-        setFieldSize(engineType, comboSize);
-        setFieldSize(enhancement, comboSize);
-        setFieldSize(gyroType, comboSize);
-        setFieldSize(cockpitType, comboSize);
-        setFieldSize(structureCombo, comboSize);
-        setFieldSize(jjType, comboSize);
-        setFieldSize(model, comboSize);
-        setFieldSize(chassis, comboSize);
+        panBasicInfo.setFromEntity(getMech());
+        panChassis.setFromEntity(getMech());
+        panArmor.setFromEntity(getMech());
+        panMovement.setFromEntity(getMech());
+        panHeat.setFromMech(getMech());
+        panArmorAllocation.setFromEntity(getMech());
+        panPatchwork.setFromEntity(getMech());
 
         JPanel leftPanel = new JPanel();
+        JPanel centerPanel = new JPanel();
         JPanel rightPanel = new JPanel();
         leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
         rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
 
-        leftPanel.add(panInfo);
+        leftPanel.add(panBasicInfo);
         leftPanel.add(Box.createVerticalStrut(11));
         leftPanel.add(panChassis);
         leftPanel.add(Box.createVerticalStrut(11));
         leftPanel.add(panHeat);
         leftPanel.add(Box.createGlue());
-        
-        rightPanel.add(panArmor);
-        rightPanel.add(panMovement);       
-        rightPanel.add(panSummary);
-        leftPanel.add(Box.createVerticalGlue());
+
+        centerPanel.add(panArmor);
+        centerPanel.add(panMovement);       
+        centerPanel.add(panSummary);
+        centerPanel.add(Box.createVerticalGlue());
+
+        rightPanel.add(panArmorAllocation);
+        rightPanel.add(panPatchwork);
+        rightPanel.add(Box.createVerticalGlue());
 
         gbc = new GridBagConstraints();
         gbc.gridx = 0;
@@ -605,176 +147,31 @@ public class StructureTab extends ITab implements ActionListener, KeyListener,
         gbc.anchor = GridBagConstraints.NORTHWEST;
         masterPanel.add(leftPanel, gbc);
         gbc.gridx = 1;
-        masterPanel.add(rightPanel, gbc);
+        masterPanel.add(centerPanel, gbc);
         gbc.gridx = 2;
-        masterPanel.add(armor, gbc);
+        masterPanel.add(rightPanel, gbc);
 
-        panInfo.setBorder(BorderFactory.createTitledBorder("Basic Information"));
+        panBasicInfo.setBorder(BorderFactory.createTitledBorder("Basic Information"));
         panChassis.setBorder(BorderFactory.createTitledBorder("Chassis"));
         panMovement.setBorder(BorderFactory.createTitledBorder("Movement"));
         panHeat.setBorder(BorderFactory.createTitledBorder("Heat Sinks"));
         panArmor.setBorder(BorderFactory.createTitledBorder("Armor"));
         panSummary.setBorder(BorderFactory.createTitledBorder("Summary"));
-        armor.setBorder(BorderFactory.createTitledBorder("Armor Allocation"));
+        panArmorAllocation.setBorder(BorderFactory.createTitledBorder("Armor Allocation"));
+        panPatchwork.setBorder(BorderFactory.createTitledBorder("Patchwork Armor"));
 
     }
 
     public void refresh() {
         removeAllListeners();
-        if (getMech().isPrimitive()) {
-            getMech().setOmni(false);
-            omniCB.setEnabled(false);
-        } else {
-            omniCB.setEnabled(true);
-        }
-        omniCB.setSelected(getMech().isOmni());
-        if (getMech() instanceof TripodMech) {
-            motiveType.setSelectedIndex(2);
-        }
-        if (getMech() instanceof QuadMech) {
-            motiveType.setSelectedIndex(1);
-        } else {
-            motiveType.setSelectedItem(0);
-        }
-        lamCB.setSelected(getMech() instanceof LandAirMech);
-        fullHeadEjectCB.setSelected(getMech().hasFullHeadEject());
-        era.setText(Integer.toString(getMech().getYear()));
-        source.setText(getMech().getSource());
-        manualBV.setText(Integer.toString(Math.max(0, getMech().getManualBV())));
-        weightClass.setValue((int) (getMech().getWeight()));
+        panBasicInfo.setFromEntity(getMech());
+        panChassis.setFromEntity(getMech());
+        panArmor.setFromEntity(getMech());
+        panHeat.setFromMech(getMech());
+        panMovement.setFromEntity(getMech());
+        panArmorAllocation.setFromEntity(getMech());
+        panPatchwork.setFromEntity(getMech());
 
-        int totalSinks = getMech().heatSinks(false);
-        int freeSinks = getMech().getEngine().getWeightFreeEngineHeatSinks();
-        ((SpinnerNumberModel) heatSinkNumber.getModel()).setMinimum(freeSinks);
-        heatSinkNumber.setValue(totalSinks);
-
-        ((SpinnerNumberModel) baseChassisHeatSinks.getModel())
-                .setMaximum(getMech().getEngine().integralHeatSinkCapacity(
-                        getMech().hasCompactHeatSinks()));
-
-        baseChassisHeatSinks.setValue(Math.max(0, getMech().getEngine()
-                .getBaseChassisHeatSinks(getMech().hasCompactHeatSinks())));
-
-        if (getMech().isOmni()) {
-            baseChassisHeatSinks.setEnabled(true);
-            getMech().getEngine().setBaseChassisHeatSinks(
-                    Math.max(0, (Integer) baseChassisHeatSinks.getValue()));
-        } else {
-            baseChassisHeatSinks.setEnabled(false);
-            getMech().getEngine().setBaseChassisHeatSinks(-1);
-        }
-
-        lblFreeSinks.setText("Engine Free: "
-                + UnitUtil.getBaseChassisHeatSinks(getMech(), getMech()
-                        .hasCompactHeatSinks()));
-
-        if (getMech().isClan()) {
-            techLevel.removeAllItems();
-            for (String item : clanTechLevels) {
-                techLevel.addItem(item);
-            }
-        } else {
-            techLevel.removeAllItems();
-            for (String item : isTechLevels) {
-                techLevel.addItem(item);
-            }
-        }
-        engineType.setSelectedIndex(convertEngineType(getMech().getEngine()
-                .getEngineType()));
-
-        setEnhancementCombo();
-        setStructureCombo();
-        if (getMech().hasPatchworkArmor()) {
-            setArmorCombo(EquipmentType.T_ARMOR_PATCHWORK);
-        } else {
-            setArmorCombo(getMech().getArmorType(0));
-        }
-
-        cockpitType.setSelectedItem(Mech.COCKPIT_SHORT_STRING[getMech()
-                .getCockpitType()]);
-        gyroType.setSelectedIndex(getMech().getGyroType());
-
-        if (getMech().isMixedTech()) {
-            if (getMech().isClan()) {
-
-                techType.setSelectedIndex(3);
-                if (getMech().getTechLevel() >= TechConstants.T_CLAN_UNOFFICIAL) {
-                    techLevel.setSelectedIndex(3);
-                } else if (getMech().getTechLevel() >= TechConstants.T_CLAN_EXPERIMENTAL) {
-                    techLevel.setSelectedIndex(2);
-                } else {
-                    techLevel.setSelectedIndex(1);
-                }
-            } else {
-                techType.setSelectedIndex(2);
-
-                if (getMech().getTechLevel() >= TechConstants.T_IS_UNOFFICIAL) {
-                    techLevel.setSelectedIndex(4);
-                } else if (getMech().getTechLevel() >= TechConstants.T_IS_EXPERIMENTAL) {
-                    techLevel.setSelectedIndex(3);
-                } else {
-                    techLevel.setSelectedIndex(2);
-                }
-            }
-        } else if (getMech().isClan()) {
-
-            techType.setSelectedIndex(1);
-            if (getMech().getTechLevel() >= TechConstants.T_CLAN_UNOFFICIAL) {
-                techLevel.setSelectedIndex(3);
-            } else if (getMech().getTechLevel() >= TechConstants.T_CLAN_EXPERIMENTAL) {
-                techLevel.setSelectedIndex(2);
-            } else if (getMech().getTechLevel() >= TechConstants.T_CLAN_ADVANCED) {
-                techLevel.setSelectedIndex(1);
-            } else {
-                techLevel.setSelectedIndex(0);
-            }
-        } else {
-            techType.setSelectedIndex(0);
-
-            if (getMech().getTechLevel() >= TechConstants.T_IS_UNOFFICIAL) {
-                techLevel.setSelectedIndex(4);
-            } else if (getMech().getTechLevel() >= TechConstants.T_IS_EXPERIMENTAL) {
-                techLevel.setSelectedIndex(3);
-            } else if (getMech().getTechLevel() >= TechConstants.T_IS_ADVANCED) {
-                techLevel.setSelectedIndex(2);
-            } else if (getMech().getTechLevel() >= TechConstants.T_IS_TW_NON_BOX) {
-                techLevel.setSelectedIndex(1);
-            } else {
-                techLevel.setSelectedIndex(0);
-            }
-
-        }
-
-        setHeatSinkCombo();
-
-        walkMP.setValue(Math.max(1, getMech().getOriginalWalkMP()));
-        setJumpJetCombo();
-        refreshJumpMP();
-        runMP.setText(getMech().getRunMPasString());
-
-        ((SpinnerNumberModel) armorTonnage.getModel()).setMaximum(UnitUtil
-                .getMaximumArmorTonnage(getMech()));
-        ((SpinnerNumberModel) armorTonnage.getModel()).setValue(Math.min(
-                UnitUtil.getMaximumArmorTonnage(getMech()),
-                getMech().getLabArmorTonnage()));
-        if (getMech().hasPatchworkArmor()) {
-            TestMech testMech = new TestMech(
-                    getMech(),
-                    new EntityVerifier(new File(
-                            "data/mechfiles/UnitVerifierOptions.xml")).mechOption,
-                    null);
-            armorTonnage.setEnabled(false);
-            armorTonnage.getModel()
-                    .setValue(testMech.getWeightAllocatedArmor());
-            getMech().setArmorTonnage(testMech.getWeightAllocatedArmor());
-            maximizeArmorButton.setEnabled(false);
-            unusedTonnageArmorButton.setEnabled(false);
-        } else {
-            armorTonnage.setEnabled(true);
-            maximizeArmorButton.setEnabled(true);
-            unusedTonnageArmorButton.setEnabled(true);
-        }
-        armor.refresh();
         panSummary.refresh();
         addAllListeners();
 
@@ -794,492 +191,274 @@ public class StructureTab extends ITab implements ActionListener, KeyListener,
         box.setMinimumSize(maxSize);
     }
 
-    public void itemStateChanged(ItemEvent e) {
-        if (e.getStateChange() == ItemEvent.SELECTED) {
-            removeAllListeners();
-            @SuppressWarnings("unchecked")
-            JComboBox<String> combo = (JComboBox<String>) e.getSource();
-
-            // we need to do cockpit also here, because cockpitType
-            // determines
-            // if a mech is primitive and thus needs a larger engine
-            if (combo.equals(engineType) || combo.equals(cockpitType)) {
-                if (combo.equals(cockpitType)) {
-                    refreshCockpitType();
-                }
-                resetEngine();
-            } else if (combo.equals(armorCombo)) {
-                if (!getMech().hasPatchworkArmor()) {
-                    UnitUtil.removeISorArmorMounts(getMech(), false);
-                }
-                createArmorMountsAndSetArmorType();
-                if (!getMech().hasPatchworkArmor()) {
-                    armor.resetArmorPoints();
-                }
-            } else if (combo.equals(structureCombo)) {
-                UnitUtil.removeISorArmorMounts(getMech(), true);
-                createISMounts();
-                populateChoices(true);
-            } else if (combo.equals(gyroType)) {
-                if (getMech().getEngine().hasFlag(Engine.LARGE_ENGINE)
-                        && (combo.getSelectedIndex() == Mech.GYRO_XL)) {
-                    JOptionPane
-                            .showMessageDialog(
-                                    this,
-                                    "A XL gyro does not fit with a large engine installed",
-                                    "Bad Gyro", JOptionPane.ERROR_MESSAGE);
-                } else {
-                    getMech().setGyroType(combo.getSelectedIndex());
-                    getMech().clearGyroCrits();
-
-                    switch (getMech().getGyroType()) {
-                        case Mech.GYRO_COMPACT:
-                            getMech().addCompactGyro();
-                            getMech().clearEngineCrits();
-                            getMech().addEngineCrits();
-                            break;
-                        case Mech.GYRO_HEAVY_DUTY:
-                            getMech().addHeavyDutyGyro();
-                            break;
-                        case Mech.GYRO_XL:
-                            getMech().addXLGyro();
-                            break;
-                        case Mech.GYRO_NONE:
-                            UnitUtil.compactCriticals(getMech(), Mech.LOC_CT);
-                            break;
-                        default:
-                            getMech().addGyro();
-                    }
-                }
-            } else if (combo.equals(heatSinkType)) {
-                UnitUtil.updateHeatSinks(getMech(), (Integer) heatSinkNumber
-                        .getValue(), heatSinkType.getSelectedItem().toString());
-            } else if (combo.equals(jjType)) {
-                refreshJumpMP();
-            } else if (combo.equals(enhancement)) {
-                UnitUtil.updateEnhancements(getMech(), hasMASC(), hasTSM());
-            } else if (combo.equals(techLevel)) {
-                int unitTechLevel = techLevel.getSelectedIndex();
-
-                if (getMech().isClan()) {
-                    switch (unitTechLevel) {
-                        case 0:
-                            getMech().setTechLevel(TechConstants.T_CLAN_TW);
-                            techType.setSelectedIndex(1);
-                            break;
-                        case 1:
-                            getMech().setTechLevel(
-                                    TechConstants.T_CLAN_ADVANCED);
-                            break;
-                        case 2:
-                            getMech().setTechLevel(
-                                    TechConstants.T_CLAN_EXPERIMENTAL);
-                            break;
-                        case 3:
-                            getMech().setTechLevel(
-                                    TechConstants.T_CLAN_UNOFFICIAL);
-                            break;
-                        default:
-                            getMech().setTechLevel(TechConstants.T_CLAN_TW);
-                            break;
-                    }
-
-                } else {
-                    switch (unitTechLevel) {
-                        case 0:
-                            getMech()
-                                    .setTechLevel(TechConstants.T_INTRO_BOXSET);
-                            techType.setSelectedIndex(0);
-                            break;
-                        case 1:
-                            getMech().setTechLevel(
-                                    TechConstants.T_IS_TW_NON_BOX);
-                            techType.setSelectedIndex(0);
-                            break;
-                        case 2:
-                            getMech().setTechLevel(TechConstants.T_IS_ADVANCED);
-                            break;
-                        case 3:
-                            getMech().setTechLevel(
-                                    TechConstants.T_IS_EXPERIMENTAL);
-                            break;
-                        default:
-                            getMech().setTechLevel(
-                                    TechConstants.T_IS_UNOFFICIAL);
-                            break;
-                    }
-                }
-                populateChoices(true);
-                refreshCockpitType();
-                armor.resetArmorPoints();
-                UnitUtil.checkEquipmentByTechLevel(getMech());
-            } else if (combo.equals(techType)) {
-                if ((techType.getSelectedIndex() == 1)
-                        && (!getMech().isClan() || getMech().isMixedTech())) {
-                    techLevel.removeAllItems();
-                    for (String item : clanTechLevels) {
-                        techLevel.addItem(item);
-                    }
-                    getMech().setMixedTech(false);
-                    if (!getMech().isClan()) {
-                        int level = TechConstants
-                                .getOppositeTechLevel(getMech().getTechLevel());
-                        getMech().setTechLevel(level);
-                        getMech().setStructureTechLevel(level);
-                    }
-                } else if ((techType.getSelectedIndex() == 0)
-                        && (getMech().isClan() || getMech().isMixedTech())) {
-                    techLevel.removeAllItems();
-                    for (String item : isTechLevels) {
-                        techLevel.addItem(item);
-                    }
-                    getMech().setMixedTech(false);
-                    if (getMech().isClan()) {
-                        int level = TechConstants
-                                .getOppositeTechLevel(getMech().getTechLevel());
-                        getMech().setTechLevel(level);
-                        getMech().setStructureTechLevel(level);
-                    }
-                } else if ((techType.getSelectedIndex() == 2)
-                        && (!getMech().isMixedTech() || getMech().isClan())) {
-                    techLevel.removeAllItems();
-                    for (String item : isTechLevels) {
-                        techLevel.addItem(item);
-                    }
-                    if (getMech().getYear() < 3090) {
-                        // before 3090, mixed tech is experimental
-                        if ((getMech().getTechLevel() != TechConstants.T_IS_UNOFFICIAL)) {
-                            getMech().setTechLevel(TechConstants.T_IS_EXPERIMENTAL);
-                        }
-                    } else if (getMech().getYear() < 3145) {
-                        // between 3090 and 3145, mixed tech is advanced
-                        if ((getMech().getTechLevel() != TechConstants.T_IS_UNOFFICIAL)
-                                && (getMech().getTechLevel() != TechConstants.T_IS_EXPERIMENTAL)) {
-                            getMech().setTechLevel(TechConstants.T_IS_ADVANCED);
-                        }
-                    } else {
-                        // from 3145 on, mixed tech is tourney legal
-                        if ((getMech().getTechLevel() != TechConstants.T_IS_UNOFFICIAL)
-                                && (getMech().getTechLevel() != TechConstants.T_IS_EXPERIMENTAL)
-                                && (getMech().getTechLevel() != TechConstants.T_IS_TW_NON_BOX)) {
-                            getMech().setTechLevel(TechConstants.T_IS_TW_NON_BOX);
-                        }
-                    }
-                    getMech().setMixedTech(true);
-
-                } else if ((techType.getSelectedIndex() == 3)
-                        && (!getMech().isMixedTech() || !getMech().isClan())) {
-                    techLevel.removeAllItems();
-                    for (String item : clanTechLevels) {
-                        techLevel.addItem(item);
-                    }
-                    if (getMech().getYear() < 3090) {
-                        // before 3090, mixed tech is experimental
-                        if ((getMech().getTechLevel() != TechConstants.T_CLAN_UNOFFICIAL)) {
-                            getMech().setTechLevel(TechConstants.T_CLAN_EXPERIMENTAL);
-                        }
-                    } else if (getMech().getYear() < 3145) {
-                        // between 3090 and 3145, mixed tech is advanced
-                        if ((getMech().getTechLevel() != TechConstants.T_CLAN_UNOFFICIAL)
-                                && (getMech().getTechLevel() != TechConstants.T_CLAN_EXPERIMENTAL)) {
-                            getMech().setTechLevel(TechConstants.T_CLAN_ADVANCED);
-                        }
-                    } else {
-                        // from 3145 on, mixed tech is tourney legal
-                        if ((getMech().getTechLevel() != TechConstants.T_CLAN_UNOFFICIAL)
-                                && (getMech().getTechLevel() != TechConstants.T_CLAN_EXPERIMENTAL)
-                                && (getMech().getTechLevel() != TechConstants.T_CLAN_TW)) {
-                            getMech().setTechLevel(TechConstants.T_CLAN_TW);
-                        }
-                    }
-                    getMech().setMixedTech(true);
-                }
-                if (!getMech().hasPatchworkArmor()) {
-                    UnitUtil.removeISorArmorMounts(getMech(), false);
-                }
-                createArmorMountsAndSetArmorType();
-                populateChoices(true);
-                armor.resetArmorPoints();
-                UnitUtil.checkEquipmentByTechLevel(getMech());
-            }
-            addAllListeners();
-            refresh.refreshAll();
-        }
+    public ITechManager getTechManager() {
+        return panBasicInfo;
     }
 
-    public void refreshJumpMP() {
-        // check to make sure we are not over the number of jets
-        // we are allowed
-        jumpMP.setValue(getMech().getOriginalJumpMP());
-        if ((getJumpJetType() == Mech.JUMP_IMPROVED)
-                || (getJumpJetType() == Mech.JUMP_PROTOTYPE_IMPROVED)) {
-            jumpModel.setMaximum(getMech().getRunMP());
-        } else if (getJumpJetType() == Mech.JUMP_BOOSTER) {
-            jumpModel.setMaximum(20);
-        } else {
-            jumpModel.setMaximum(getMech().getOriginalWalkMP());
-        }
-        if (jumpModel.getNumJets() > (Integer) jumpModel.getMaximum()) {
-            jumpMP.setValue(jumpModel.getMaximum());
-        }
-        UnitUtil.updateJumpJets(getMech(), jumpModel.getNumJets(),
-                getJumpJetType());
+    /*
+     * Used by MekHQ to set the tech faction for custom refits.
+     */
+    public void setTechFaction(int techFaction) {
+        panBasicInfo.setTechFaction(techFaction);
     }
 
-    public void refreshCockpitType() {
-        getMech().setCockpitType(
-                Mech.getCockpitTypeForString(cockpitType
-                        .getSelectedItem().toString()));
+    private void resetSystemCrits() {
         getMech().clearCockpitCrits();
+        getMech().clearGyroCrits();
+        getMech().clearEngineCrits();
+        removeSystemCrits(LandAirMech.LAM_LANDING_GEAR, Mech.LOC_CT);
+
+        int[] ctEngine = getMech().getEngine().getCenterTorsoCriticalSlots(getMech().getGyroType());
+        int lastEngine = ctEngine[ctEngine.length - 1];
+        for (int slot = 0; slot <= lastEngine; slot++) {
+            clearCrit(Mech.LOC_CT, slot);
+        }
+        for (int slot : getMech().getEngine().getSideTorsoCriticalSlots()) {
+            clearCrit(Mech.LOC_RT, slot);
+            clearCrit(Mech.LOC_LT, slot);
+        }
+        getMech().addEngineCrits();
+        switch (getMech().getGyroType()) {
+            case Mech.GYRO_COMPACT:
+                clearCritsForGyro(2);
+                getMech().addCompactGyro();
+                break;
+            case Mech.GYRO_HEAVY_DUTY:
+                clearCritsForGyro(4);
+                getMech().addHeavyDutyGyro();
+                break;
+            case Mech.GYRO_XL:
+                clearCritsForGyro(6);
+                getMech().addXLGyro();
+                break;
+            case Mech.GYRO_NONE:
+                UnitUtil.compactCriticals(getMech(), Mech.LOC_CT);
+                break;
+            default:
+                clearCritsForGyro(4);
+                getMech().addGyro();
+        }
+
         switch (getMech().getCockpitType()) {
             case Mech.COCKPIT_COMMAND_CONSOLE:
+                clearCritsForCockpit(false, true);
                 getMech().addCommandConsole();
                 break;
             case Mech.COCKPIT_DUAL:
+                clearCritsForCockpit(false, true);
                 getMech().addDualCockpit();
                 break;
             case Mech.COCKPIT_SMALL:
+                clearCritsForCockpit(true, false);
                 getMech().addSmallCockpit();
                 break;
             case Mech.COCKPIT_INTERFACE:
+                clearCritsForCockpit(false, true);
                 getMech().addInterfaceCockpit();
                 break;
             case Mech.COCKPIT_TORSO_MOUNTED:
-                removeSystemCrits(Mech.SYSTEM_ENGINE);
-                getMech().addEngineCrits();
-                getMech().addTorsoMountedCockpit();
+            case Mech.COCKPIT_VRRP:
+                if (lastEngine + 2 < getMech().getNumberOfCriticals(Mech.LOC_CT)) {
+                    clearCrit(Mech.LOC_CT, lastEngine + 1);
+                    clearCrit(Mech.LOC_CT, lastEngine + 2);
+                }
+                clearCrit(Mech.LOC_HEAD, 0);
+                clearCrit(Mech.LOC_HEAD, 1);
+                if (getMech().getEmptyCriticals(Mech.LOC_LT) < 1) {
+                    for (int i = 0; i < getMech().getNumberOfCriticals(Mech.LOC_LT); i++) {
+                        if (getMech().getCritical(Mech.LOC_LT, i) != null
+                                && getMech().getCritical(Mech.LOC_LT, i).getType() == CriticalSlot.TYPE_EQUIPMENT) {
+                            clearCrit(Mech.LOC_LT, i);
+                            break;
+                        }
+                    }
+                }
+                if (getMech().getEmptyCriticals(Mech.LOC_RT) < 1) {
+                    for (int i = 0; i < getMech().getNumberOfCriticals(Mech.LOC_RT); i++) {
+                        if (getMech().getCritical(Mech.LOC_RT, i) != null
+                                && getMech().getCritical(Mech.LOC_RT, i).getType() == CriticalSlot.TYPE_EQUIPMENT) {
+                            clearCrit(Mech.LOC_RT, i);
+                            break;
+                        }
+                    }
+                }
+                getMech().addTorsoMountedCockpit(getMech().getCockpitType() == Mech.COCKPIT_VRRP);
                 break;
             case Mech.COCKPIT_INDUSTRIAL:
+                clearCritsForCockpit(false, false);
                 getMech().addIndustrialCockpit();
                 getMech().setArmorType(
                         EquipmentType.T_ARMOR_INDUSTRIAL);
                 break;
             case Mech.COCKPIT_PRIMITIVE:
+                clearCritsForCockpit(false, false);
                 getMech().addPrimitiveCockpit();
                 getMech().setArmorType(
                         EquipmentType.T_ARMOR_PRIMITIVE);
                 break;
             case Mech.COCKPIT_PRIMITIVE_INDUSTRIAL:
+                clearCritsForCockpit(false, false);
                 getMech().addIndustrialPrimitiveCockpit();
                 getMech().setArmorType(
                         EquipmentType.T_ARMOR_COMMERCIAL);
                 break;
+            case Mech.COCKPIT_QUADVEE:
+                clearCritsForCockpit(false, true);
+                getMech().addQuadVeeCockpit();
+                break;
             default:
+                clearCritsForCockpit(false, false);
                 getMech().addCockpit();
         }
-        armor.resetArmorPoints();
-        populateChoices(true);
+        // For LAMs we want to put the landing gear in the first available slot after the engine and gyro.
+        if (getMech().hasETypeFlag(Entity.ETYPE_LAND_AIR_MECH)) {
+            int lgSlot = 10;
+            for (int i = 0; i < getMech().getNumberOfCriticals(Mech.LOC_CT); i++) {
+                final CriticalSlot slot = getMech().getCritical(Mech.LOC_CT, i);
+                if ((null == slot) || (slot.getType() == CriticalSlot.TYPE_EQUIPMENT)
+                        || ((slot.getIndex() != Mech.SYSTEM_ENGINE) && (slot.getIndex() != Mech.SYSTEM_GYRO))) {
+                    lgSlot = i;
+                    break;
+                }
+            }
+            CriticalSlot crit = new CriticalSlot(CriticalSlot.TYPE_SYSTEM,
+                    LandAirMech.LAM_LANDING_GEAR);
+            getMech().removeCriticals(Mech.LOC_CT, crit);
+            clearCrit(Mech.LOC_CT, lgSlot);
+            getMech().setCritical(Mech.LOC_CT, lgSlot, crit);
+        }
+        refresh.refreshBuild();
     }
 
-    public void actionPerformed(ActionEvent e) {
-        removeAllListeners();
-        if (e.getSource() instanceof JCheckBox) {
-            JCheckBox check = (JCheckBox) e.getSource();
-            if (check.equals(omniCB)) {
-                getMech().setOmni(omniCB.isSelected());
-                if (getMech().isOmni()) {
-                    baseChassisHeatSinks.setEnabled(true);
-                    getMech().getEngine().setBaseChassisHeatSinks(
-                            10 + (Integer) baseChassisHeatSinks.getValue());
-                    UnitUtil.removeOmniArmActuators(getMech());
-                } else {
-                    baseChassisHeatSinks.setEnabled(false);
-                    getMech().getEngine().setBaseChassisHeatSinks(-1);
-                }
-                UnitUtil.updateAutoSinks(getMech(),
-                        (String) heatSinkType.getSelectedItem());
-
-            } else if (check.equals(fullHeadEjectCB)) {
-                getMech().setFullHeadEject(fullHeadEjectCB.isSelected());
+    /**
+     * Removes equipment placed in head locations that are needed for a cockpit. For most cockpit
+     * types, this is all but the fourth slot.
+     * 
+     * @param small If true, only clears the first four slots.
+     * @param dual  If true, removes all equipment mounted in the head.
+     */
+    private void clearCritsForCockpit(boolean small, boolean dual) {
+        for (int slot = 0; slot < (small?4:6); slot++) {
+            if ((slot == 3) && !dual) {
+                continue;
             }
-        } else if (e.getSource() instanceof JButton) {
-            if (e.getSource().equals(maximizeArmorButton)) {
-                maximizeArmor();
-            } else if (e.getSource().equals(unusedTonnageArmorButton)) {
-                useRemainingTonnageArmor();
+            clearCrit(Mech.LOC_HEAD, slot);
+        }
+    }
+    
+    private void clearCritsForGyro(int numSlots) {
+        for (int i = 3; i < 3 + numSlots; i++) {
+            clearCrit(Mech.LOC_CT, i);
+            getMech().setCritical(Mech.LOC_CT, i, null);
+        }
+    }
+
+    /**
+     * Removes equipment placed in the given critical slot to clear the space for a system critical
+     */
+    private void clearCrit(int loc, int slotNum) {
+        final CriticalSlot crit = getMech().getCritical(loc, slotNum);
+        Mounted mounted = null;
+        if (crit != null && crit.getType() == CriticalSlot.TYPE_EQUIPMENT) {
+            mounted = crit.getMount();
+        }
+        if (mounted == null) {
+            return;
+        }
+        UnitUtil.removeCriticals(getMech(), mounted);
+        if (crit.getMount2() != null) {
+            UnitUtil.removeCriticals(getMech(), crit.getMount2());
+        }
+
+        // Check linkings after you remove everything.
+        try {
+            MechFileParser.postLoadInit(getMech());
+        } catch (EntityLoadingException ele) {
+            // do nothing.
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        if ((crit != null) && (crit.getType() == CriticalSlot.TYPE_EQUIPMENT)) {
+            UnitUtil.changeMountStatus(getMech(), mounted, Entity.LOC_NONE, Entity.LOC_NONE,
+                    false);
+            if (crit.getMount2() != null) {
+                UnitUtil.changeMountStatus(getMech(), crit.getMount2(), Entity.LOC_NONE, Entity.LOC_NONE,
+                        false);
             }
         }
-        addAllListeners();
-        refresh.refreshAll();
+
     }
+    
+    private void removeSystemCrits(int systemType, int loc) {
+        for (int slot = 0; slot < getMech().getNumberOfCriticals(loc); slot++) {
+            CriticalSlot cs = getMech().getCritical(loc, slot);
 
-    public void removeSystemCrits(int systemType) {
+            if ((cs == null) || (cs.getType() != CriticalSlot.TYPE_SYSTEM)) {
+                continue;
+            }
 
-        for (int loc = 0; loc < getMech().locations(); loc++) {
-            for (int slot = 0; slot < getMech().getNumberOfCriticals(loc); slot++) {
-                CriticalSlot cs = getMech().getCritical(loc, slot);
-
-                if ((cs == null) || (cs.getType() != CriticalSlot.TYPE_SYSTEM)) {
-                    continue;
-                }
-
-                if (cs.getIndex() == systemType) {
-                    getMech().setCritical(loc, slot, null);
-                }
+            if (cs.getIndex() == systemType) {
+                getMech().setCritical(loc, slot, null);
             }
         }
     }
 
     public void removeAllListeners() {
-        maximizeArmorButton.removeActionListener(this);
-        unusedTonnageArmorButton.removeActionListener(this);
-        armorCombo.removeItemListener(this);
-        gyroType.removeItemListener(this);
-        engineType.removeItemListener(this);
-        weightClass.removeChangeListener(this);
-        cockpitType.removeItemListener(this);
-        heatSinkNumber.removeChangeListener(this);
-        heatSinkType.removeItemListener(this);
-        walkMP.removeChangeListener(this);
-        techLevel.removeItemListener(this);
-        techType.removeItemListener(this);
-        era.removeKeyListener(this);
-        source.removeKeyListener(this);
-        manualBV.removeKeyListener(this);
-        omniCB.removeActionListener(this);
-        motiveType.removeItemListener(this);
-        lamCB.removeActionListener(this);
-        fullHeadEjectCB.removeActionListener(this);
-        structureCombo.removeItemListener(this);
-        baseChassisHeatSinks.removeChangeListener(this);
-        chassis.removeKeyListener(this);
-        model.removeKeyListener(this);
-        jumpMP.removeChangeListener(this);
-        jjType.removeItemListener(this);
-        enhancement.removeItemListener(this);
-        armorTonnage.removeChangeListener(this);
+        panBasicInfo.removeListener(this);
+        panChassis.removeListener(this);
+        panHeat.removeListener(this);
+        panArmor.removeListener(this);
+        panMovement.removeListener(this);
+        panArmorAllocation.removeListener(this);
+        panPatchwork.removeListener(this);
     }
 
     public void addAllListeners() {
-        maximizeArmorButton.addActionListener(this);
-        unusedTonnageArmorButton.addActionListener(this);
-        armorCombo.addItemListener(this);
-        gyroType.addItemListener(this);
-        engineType.addItemListener(this);
-        weightClass.addChangeListener(this);
-        cockpitType.addItemListener(this);
-        heatSinkNumber.addChangeListener(this);
-        heatSinkType.addItemListener(this);
-        walkMP.addChangeListener(this);
-        techLevel.addItemListener(this);
-        techType.addItemListener(this);
-        era.addKeyListener(this);
-        source.addKeyListener(this);
-        manualBV.addKeyListener(this);
-        omniCB.addActionListener(this);
-        motiveType.addItemListener(this);
-        lamCB.addActionListener(this);
-        fullHeadEjectCB.addActionListener(this);
-        structureCombo.addItemListener(this);
-        baseChassisHeatSinks.addChangeListener(this);
-        chassis.addKeyListener(this);
-        model.addKeyListener(this);
-        jumpMP.addChangeListener(this);
-        jjType.addItemListener(this);
-        enhancement.addItemListener(this);
-        armorTonnage.addChangeListener(this);
-
-    }
-
-    public void keyPressed(KeyEvent e) {
-
-    }
-
-    public void keyReleased(KeyEvent e) {
-        removeAllListeners();
-        if (e.getSource().equals(era)) {
-            try {
-                int year = Integer.parseInt(era.getText());
-                if (year < 1950) {
-                    addAllListeners();
-                    return;
-                }
-                getMech().setYear(Integer.parseInt(era.getText()));
-            } catch (Exception ex) {
-                getMech().setYear(3145);
-            }            
-            populateChoices(true);
-            armor.resetArmorPoints();
-            UnitUtil.checkEquipmentByTechLevel(getMech());
-        } else if (e.getSource().equals(source)) {
-            getMech().setSource(source.getText());
-        } else if (e.getSource().equals(manualBV)) {
-            if (!manualBV.getText().equals("-")) {
-                int bv = Integer.parseInt(manualBV.getText());
-                if (bv == 0) {
-                    getMech().setUseManualBV(false);
-                    getMech().setManualBV(0);
-                } else {
-                    getMech().setUseManualBV(true);
-                    getMech().setManualBV(bv);
-                }
-            }
-        } else if (e.getSource().equals(chassis)) {
-            getMech().setChassis(chassis.getText().trim());
-        } else if (e.getSource().equals(model)) {
-            getMech().setModel(model.getText().trim());
-        }
-        addAllListeners();
-        refresh.refreshEquipment();
-        refresh.refreshPreview();
-        refresh.refreshHeader();
-    }
-
-    public void keyTyped(KeyEvent e) {
+        panBasicInfo.addListener(this);
+        panChassis.addListener(this);
+        panHeat.addListener(this);
+        panArmor.addListener(this);
+        panMovement.addListener(this);
+        panArmorAllocation.addListener(this);
+        panPatchwork.addListener(this);
     }
 
     public void addRefreshedListener(RefreshListener l) {
         refresh = l;
-        armor.addRefreshedListener(l);
     }
 
     public boolean isQuad() {
-        return motiveType.getSelectedIndex() == 1;
+        return (panChassis.getBaseTypeIndex() == MekChassisView.BASE_TYPE_STANDARD)
+                && (panChassis.getMotiveTypeIndex() == MekChassisView.MOTIVE_TYPE_QUAD);
     }
 
     public boolean isTripod() {
-        return motiveType.getSelectedIndex() == 2;
+        return (panChassis.getBaseTypeIndex() == MekChassisView.BASE_TYPE_STANDARD)
+                && (panChassis.getMotiveTypeIndex() == MekChassisView.MOTIVE_TYPE_TRIPOD);
     }
 
     public boolean isLAM() {
-        return lamCB.isSelected();
+        return (panChassis.getBaseTypeIndex() == MekChassisView.BASE_TYPE_LAM);
     }
 
-    private void createISMounts() {
+    public boolean isQuadVee() {
+        return (panChassis.getBaseTypeIndex() == MekChassisView.BASE_TYPE_QUADVEE);
+    }
+
+    private void createISMounts(EquipmentType structure) {
         int isCount = 0;
-        String structName = (String)structureCombo.getSelectedItem();
+        getMech().setStructureType(EquipmentType.getStructureType(structure));
+        getMech().setStructureTechLevel(structure.getStaticTechLevel().getCompoundTechLevel(structure.isClan()));
 
-        if (getMech().isMixedTech()) {
-            structName = structureCombo.getSelectedItem().toString();
-            boolean clanStruct = getMech().isClan() ? structName
-                    .indexOf(" (IS)") == -1
-                    : structName.indexOf(" (Clan)") > -1;
-
-            structName = structureCombo.getSelectedItem().toString()
-                    .replace(" (IS)", "").replace(" (Clan)", "");
-
-            if (clanStruct) {
-                structName = String.format("Clan %1$s", structName);
-            } else {
-                structName = String.format("IS %1$s", structName);
-            }
-        } else {
-            if (getMech().isClan()) {
-                structName = String.format("Clan %1$s", structName);
-            } else {
-                structName = String.format("IS %1$s", structName);
-            }
-        }
-
-        getMech().setStructureType(structName);
-        isCount = EquipmentType.get(structName).getCriticals(getMech());
+        isCount = structure.getCriticals(getMech());
         if (isCount < 1) {
             return;
         }
         for (; isCount > 0; isCount--) {
             try {
                 getMech().addEquipment(
-                        new Mounted(getMech(), EquipmentType.get(structName)),
+                        new Mounted(getMech(), structure),
                         Entity.LOC_NONE, false);
             } catch (Exception ex) {
                 ex.printStackTrace();
@@ -1287,1425 +466,845 @@ public class StructureTab extends ITab implements ActionListener, KeyListener,
         }
     }
 
-    private int convertEngineType(int engineType) {
-
-        if (getMech().isMixedTech()) {
-            // Clan Chassis with Clan Engine
-            if (getMech().isClan()
-                    && getMech().getEngine().hasFlag(Engine.CLAN_ENGINE)) {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.XL_ENGINE:
-                        return 2;
-                    case Engine.FUEL_CELL:
-                        return 7;
-                    case Engine.XXL_ENGINE:
-                        return 9;
-                }
-            }// Clan Chassis with IS Engine
-            else if (getMech().isClan()
-                    && !getMech().getEngine().hasFlag(Engine.CLAN_ENGINE)) {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 1;
-                    case Engine.XL_ENGINE:
-                        return 3;
-                    case Engine.LIGHT_ENGINE:
-                        return 4;
-                    case Engine.COMPACT_ENGINE:
-                        return 5;
-                    case Engine.FISSION:
-                        return 6;
-                    case Engine.FUEL_CELL:
-                        return 8;
-                    case Engine.XXL_ENGINE:
-                        return 10;
-                }
-            }// IS Chassis with Clan Engine
-            else if (!getMech().isClan()
-                    && getMech().getEngine().hasFlag(Engine.CLAN_ENGINE)) {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 1;
-                    case Engine.XL_ENGINE:
-                        return 3;
-                    case Engine.FUEL_CELL:
-                        return 8;
-                    case Engine.XXL_ENGINE:
-                        return 10;
-                }
-            }// IS Chassis with IS Engine
-            else {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.XL_ENGINE:
-                        return 2;
-                    case Engine.LIGHT_ENGINE:
-                        return 4;
-                    case Engine.COMPACT_ENGINE:
-                        return 5;
-                    case Engine.FISSION:
-                        return 6;
-                    case Engine.FUEL_CELL:
-                        return 7;
-                    case Engine.XXL_ENGINE:
-                        return 9;
-                }
-
-            }
-        } else if (getMech().getEngine().hasFlag(Engine.CLAN_ENGINE)) {
-            if (getMech().isIndustrial() || getMech().isPrimitive()) {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.COMBUSTION_ENGINE:
-                        return 1;
-                    case Engine.FUEL_CELL:
-                        return 2;
-                    case Engine.FISSION:
-                        return 3;
-                }
+    /**
+     * Calculates required engine rating for speed and tonnage and updates engine if possible.
+     * @return true if the new engine is legal for rating, space, and tech level
+     */
+    private boolean recalculateEngineRating(int walkMP, double tonnage) {
+        int rating = walkMP * (int)tonnage;
+        if (getMech().isPrimitive()) {
+            rating = (int)Math.ceil((rating * 1.2) / 5.0) * 5; 
+        }
+        int oldRating = getMech().getEngine().getRating();
+        if (oldRating != rating) {
+            panChassis.setEngineRating(rating);
+            Engine engine = panChassis.getEngine();
+            if (!engine.engineValid || !panBasicInfo.isLegal(engine)) {
+                JOptionPane.showMessageDialog(
+                        this, String.format("The required engine rating of %d exceeds the maximum.", rating),
+                        "Bad Engine", JOptionPane.ERROR_MESSAGE);
+                panChassis.setEngineRating(oldRating);
+                return false;
+            } else if ((tonnage <= 100)
+                    && !hasCTSpace(engine, getMech().getGyroType(), getMech().getCockpitType())) {
+                JOptionPane.showMessageDialog(
+                        this, "There is not enough space in the center torso for the required engine.",
+                        "Bad Engine", JOptionPane.ERROR_MESSAGE);
+                panChassis.setEngineRating(oldRating);
+                return false;
             } else {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.XL_ENGINE:
-                        return 1;
-                    case Engine.FUEL_CELL:
-                        return 2;
-                    case Engine.XXL_ENGINE:
-                        return 3;
-                }
-            }
-        } else {
-            if (getMech().isIndustrial() || getMech().isPrimitive()) {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.COMBUSTION_ENGINE:
-                        return 1;
-                    case Engine.FUEL_CELL:
-                        return 2;
-                    case Engine.FISSION:
-                        return 3;
-                }
-            } else if (getMech().isSuperHeavy()) {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.XL_ENGINE:
-                        return 1;
-                    case Engine.LIGHT_ENGINE:
-                        return 2;
-                    case Engine.COMPACT_ENGINE:
-                        return 3;
-                    case Engine.XXL_ENGINE:
-                        return 4;
-                }
-            } else {
-                switch (engineType) {
-                    case Engine.NORMAL_ENGINE:
-                        return 0;
-                    case Engine.XL_ENGINE:
-                        return 1;
-                    case Engine.LIGHT_ENGINE:
-                        return 2;
-                    case Engine.COMPACT_ENGINE:
-                        return 3;
-                    case Engine.FISSION:
-                        return 4;
-                    case Engine.FUEL_CELL:
-                        return 5;
-                    case Engine.XXL_ENGINE:
-                        return 6;
-                }
+                engine.setBaseChassisHeatSinks(getMech().getEngine()
+                        .getBaseChassisHeatSinks(getMech().hasCompactHeatSinks()));
+                getMech().setEngine(engine);
+                UnitUtil.updateAutoSinks(getMech(), getMech().hasCompactHeatSinks());
             }
         }
-
-        return 0;
+        return true;
     }
 
-    private int convertEngineType(String engineType) {
+    private boolean hasCTSpace(Engine engine, int gyroType, int cockpitType) {
+        if (getMech().isSuperHeavy()) {
+            return true;
+        }
+        int crits = 10;
+        if (engine.getEngineType() == Engine.COMPACT_ENGINE) {
+            crits -= 3;
+        } else if (engine.hasFlag(Engine.LARGE_ENGINE)) {
+            crits += 2;
+        }
+        if (gyroType == Mech.GYRO_COMPACT) {
+            crits -= 2;
+        } else if (gyroType == Mech.GYRO_XL) {
+            crits += 2;
+        }
+        if ((cockpitType == Mech.COCKPIT_TORSO_MOUNTED)
+                || (cockpitType == Mech.COCKPIT_VRRP)) {
+            crits += 2;
+        }
+        return crits <= 12;
+    }
 
-        if (getMech().isMixedTech()) {
-            if (engineType.startsWith("(")) {
-                if (engineType.startsWith("(Clan")) {
-                    clanEngineFlag = Engine.CLAN_ENGINE;
-                } else {
-                    clanEngineFlag = 0;
-                }
+    private void createArmorMountsAndSetArmorType(int at, int aTechLevel) {
+        getMech().setArmorTechLevel(aTechLevel);
+        getMech().setArmorType(at);
+        final EquipmentType armor = EquipmentType.get(EquipmentType.getArmorTypeName(at,
+                TechConstants.isClan(aTechLevel)));
+        int armorCount = armor.getCriticals(getMech());
 
-                engineType = engineType.substring(
-                        engineType.lastIndexOf(")") + 1).trim();
-            } else {
-                if (getMech().isClan()) {
-                    clanEngineFlag = Engine.CLAN_ENGINE;
-                } else {
-                    clanEngineFlag = 0;
+        if (armorCount < 1) {
+            return;
+        }
+        // auto-place stealth crits
+        if (getMech().getArmorType(0) == EquipmentType.T_ARMOR_STEALTH) {
+            Mounted mount = UnitUtil.createSpreadMounts(
+                    getMech(),
+                    EquipmentType.get(EquipmentType.getArmorTypeName(
+                            getMech().getArmorType(0), false)));
+            if (mount == null) {
+                JOptionPane.showMessageDialog(null,
+                        "Stealth Armor does not fit in location.",
+                        "Resetting to Standard Armor",
+                        JOptionPane.INFORMATION_MESSAGE);
+                getMech().setArmorType(EquipmentType.T_ARMOR_STANDARD);
+                getMech().setArmorTechLevel(TechConstants.T_INTRO_BOXSET);
+                panArmor.setFromEntity(getMech());
+            }
+        } else {
+            for (; armorCount > 0; armorCount--) {
+                try {
+                    getMech().addEquipment(new Mounted(getMech(),
+                            armor), Entity.LOC_NONE, false);
+                } catch (Exception ex) {
                 }
             }
         }
+    }
 
-        if (engineType.equals(ENGINESTANDARD)) {
-            return Engine.NORMAL_ENGINE;
+    public void setAsCustomization() {
+        panBasicInfo.setAsCustomization();
+        panChassis.setAsCustomization();
+    }
+
+    @Override
+    public void refreshSummary() {
+        panSummary.refresh();
+    }
+
+    @Override
+    public void chassisChanged(String chassis) {
+        getMech().setChassis(chassis);
+        refresh.refreshHeader();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void modelChanged(String model) {
+        getMech().setModel(model);
+        refresh.refreshHeader();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void yearChanged(int year) {
+        getMech().setYear(year);
+        updateTechLevel();
+    }
+
+    @Override
+    public void sourceChanged(String source) {
+        getMech().setSource(source);
+    }
+
+    @Override
+    public void techBaseChanged(boolean clan, boolean mixed) {
+        if ((clan != getMech().isClan()) || (mixed != getMech().isMixedTech())) {
+            getMech().setMixedTech(mixed);
+            updateTechLevel();
         }
-        if (engineType.equals(ENGINEXL)) {
-            return Engine.XL_ENGINE;
+    }
+
+    @Override
+    public void techLevelChanged(SimpleTechLevel techLevel) {
+        updateTechLevel();
+    }
+
+    @Override
+    public void updateTechLevel() {
+        removeAllListeners();
+        getMech().setTechLevel(panBasicInfo.getTechLevel().getCompoundTechLevel(panBasicInfo.useClanTechBase()));
+        if (panArmor.isPatchwork() && !getTechManager().isLegal(Entity.getPatchworkArmorAdvancement())) {
+            panArmor.setPatchwork(false);
+            armorTypeChanged(panArmor.getArmorType(), panArmor.getArmorTechConstant());
         }
-        if (engineType.equals(ENGINEXXL)) {
-            return Engine.XXL_ENGINE;
+        if (getMech().hasPatchworkArmor()) {
+            for (int loc = 0; loc < getMech().locations(); loc++) {
+                if (!getTechManager().isLegal(panPatchwork.getArmor(loc))) {
+                    getMech().setArmorType(EquipmentType.T_ARMOR_STANDARD, TechConstants.T_INTRO_BOXSET);
+                    UnitUtil.resetArmor(getMech(), loc);
+                }
+            }
+        } else if (!getTechManager().isLegal(panArmor.getArmor())) {
+            UnitUtil.removeISorArmorMounts(getMech(), false);
         }
-        if (engineType.equals(ENGINEICE)) {
-            return Engine.COMBUSTION_ENGINE;
+        // If we have a large engine, a drop in tech level may make it unavailable and we will need
+        // to reduce speed to a legal value.
+        if (getMech().getEngine().hasFlag(Engine.LARGE_ENGINE)
+                && panChassis.getAvailableEngines().isEmpty()) {
+            int walk;
+            if (getMech().isPrimitive()) {
+                walk = 400 / (int)(getMech().getWeight() * 1.2);
+            } else {
+                walk = 400 / (int)getMech().getWeight();
+            }
+            recalculateEngineRating(walk, getMech().getWeight());
+            getMech().setOriginalWalkMP(walk);
+            panMovement.setFromEntity(getMech());
+            JOptionPane.showMessageDialog(
+                    this, String.format("Large engine not available at this tech level. Reducing MP to %d.", walk),
+                    "Bad Engine", JOptionPane.ERROR_MESSAGE);
         }
-        if (engineType.equals(ENGINECOMPACT)) {
-            return Engine.COMPACT_ENGINE;
+        if (UnitUtil.checkEquipmentByTechLevel(getMech(), panBasicInfo)) {
+            refresh.refreshEquipment();
+        } else {
+            refresh.refreshEquipmentTable();
         }
-        if (engineType.equals(ENGINEFISSION)) {
-            return Engine.FISSION;
+        panChassis.refresh();
+        panHeat.refresh();
+        panMovement.refresh();
+        panArmor.refresh();
+        panArmorAllocation.setFromEntity(getMech());
+        panPatchwork.setFromEntity(getMech());
+        refresh.refreshBuild();
+        addAllListeners();
+    }
+
+    @Override
+    public void manualBVChanged(int manualBV) {
+        getMech().setManualBV(manualBV);
+    }
+
+    @Override
+    public void tonnageChanged(double tonnage) {
+        if (!recalculateEngineRating(panMovement.getWalk(), tonnage)) {
+            panChassis.setFromEntity(getMech());
+            return;
         }
-        if (engineType.equals(ENGINEFUELCELL)) {
-            return Engine.FUEL_CELL;
+        boolean changedSuperHeavyStatus = getMech().isSuperHeavy() != tonnage > 100;
+
+        if (changedSuperHeavyStatus) {
+            // if we switch from being superheavy to not being superheavy,
+            // remove crits
+            for (Mounted mount : getMech().getEquipment()) {
+                if (!UnitUtil.isFixedLocationSpreadEquipment(mount.getType())) {
+                    UnitUtil.removeCriticals(getMech(), mount);
+                    UnitUtil.changeMountStatus(getMech(), mount, Entity.LOC_NONE, Entity.LOC_NONE, false);
+                }
+            }
         }
-        if (engineType.equals(ENGINELIGHT)) {
-            return Engine.LIGHT_ENGINE;
+        getMech().setWeight(tonnage);
+        // Force recalculation of walk MP. Set from chassis panel in case superheavy flag changed
+        getMech().setEngine(panChassis.getEngine());
+        getMech().autoSetInternal();
+        if (getMech().isSuperHeavy()) {
+            getMech().setOriginalJumpMP(0);
+        }
+        if (changedSuperHeavyStatus) {
+            // Internal structure crits may change
+            UnitUtil.removeISorArmorMounts(getMech(), true);
+            createISMounts(panChassis.getStructure());
+            resetSystemCrits();
+            panMovement.setFromEntity(getMech());
+        }
+        refresh();
+        refresh.refreshBuild();
+        refresh.refreshPreview();
+        refresh.refreshStatus();
+    }
+
+    @Override
+    public void omniChanged(boolean omni) {
+        getMech().setOmni(omni);
+        getMech().getEngine().setBaseChassisHeatSinks(
+                omni? Math.max(0, panHeat.getBaseCount()) : -1);
+        panHeat.setFromMech(getMech());
+        UnitUtil.updateAutoSinks(getMech(), getMech().hasCompactHeatSinks());
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void typeChanged(int baseType, int motiveType, long etype) {
+        boolean industrial = false;
+        switch (baseType) {
+            case MekChassisView.BASE_TYPE_INDUSTRIAL:
+                industrial = true;
+                //fall through
+            case MekChassisView.BASE_TYPE_STANDARD:
+                boolean primitive = getMech().isPrimitive();
+                if (motiveType == MekChassisView.MOTIVE_TYPE_BIPED) {
+                    if  (((getMech().getEntityType() & Entity.ETYPE_BIPED_MECH) == 0)
+                            || ((getMech().getEntityType() & Entity.ETYPE_LAND_AIR_MECH) != 0)) {
+                        eSource.createNewUnit(Entity.ETYPE_BIPED_MECH, primitive, industrial, getMech());
+                    }
+                } else if (motiveType == MekChassisView.MOTIVE_TYPE_QUAD) {
+                    if  (((getMech().getEntityType() & Entity.ETYPE_QUAD_MECH) == 0)
+                            || ((getMech().getEntityType() & Entity.ETYPE_QUADVEE) != 0)) {
+                        eSource.createNewUnit(Entity.ETYPE_QUAD_MECH, primitive, industrial, getMech());
+                    }
+                } else if ((getMech().getEntityType() & Entity.ETYPE_TRIPOD_MECH) == 0) {
+                    eSource.createNewUnit(Entity.ETYPE_TRIPOD_MECH, primitive, industrial, getMech());
+                }
+                break;
+            case MekChassisView.BASE_TYPE_LAM:
+                if (getMech() instanceof LandAirMech) {
+                    ((LandAirMech)getMech()).setLAMType(motiveType);
+                } else {
+                    eSource.createNewUnit(Entity.ETYPE_LAND_AIR_MECH, getMech());
+                }
+                break;
+            case MekChassisView.BASE_TYPE_QUADVEE:
+                if (getMech() instanceof QuadVee) {
+                    if (motiveType != ((QuadVee)getMech()).getMotiveType()) {
+                        Optional<Mounted> mount = getMech().getMisc().stream()
+                                .filter(m -> m.getType().hasFlag(MiscType.F_TRACKS))
+                                .findAny();
+                        if (mount.isPresent()) {
+                            UnitUtil.removeMounted(getMech(), mount.get());
+                        }
+
+                        if (motiveType == QuadVee.MOTIVE_WHEEL) {
+                            ((QuadVee)getMech()).setMotiveType(QuadVee.MOTIVE_WHEEL);
+                            UnitUtil.createSpreadMounts(getMech(), EquipmentType.get("Wheels"));
+                        } else {
+                            ((QuadVee)getMech()).setMotiveType(QuadVee.MOTIVE_TRACK);
+                            UnitUtil.createSpreadMounts(getMech(), EquipmentType.get("Tracks"));
+                        }
+                    }
+                } else {
+                    eSource.createNewUnit(Entity.ETYPE_QUADVEE, getMech());
+                }
+                break;
+        }
+        if (getMech().isIndustrial() != industrial) {
+            getMech().setStructureType(industrial?
+                    EquipmentType.T_STRUCTURE_INDUSTRIAL : EquipmentType.T_STRUCTURE_STANDARD);
         }
 
-        return Engine.NORMAL_ENGINE;
+        refresh();
+        refresh.refreshBuild();
+        refresh.refreshPreview();
+        refresh.refreshStatus();
+    }
+
+    @Override
+    public void structureChanged(EquipmentType structure) {
+        UnitUtil.removeISorArmorMounts(getMech(), true);
+        createISMounts(structure);
+        refreshSummary();
+        refresh.refreshBuild();
+        refresh.refreshPreview();
+        refresh.refreshStatus();
+    }
+
+    @Override
+    public void engineChanged(Engine engine) {
+        if (!hasCTSpace(engine, panChassis.getGyroType(), panChassis.getCockpitType())) {
+            JOptionPane.showMessageDialog(
+                    this, "There is not enough space in the center torso for this engine.",
+                    "Bad Engine", JOptionPane.ERROR_MESSAGE);
+            panChassis.removeListener(this);
+            panChassis.setEngine(getMech().getEngine());
+            panChassis.addListener(this);
+        } else {
+            // Make sure we keep same number of base heat sinks for omnis
+            engine.setBaseChassisHeatSinks(getMech().getEngine()
+                    .getBaseChassisHeatSinks(getMech().hasCompactHeatSinks()));
+            getMech().setEngine(engine);
+            resetSystemCrits();
+            UnitUtil.updateAutoSinks(getMech(), getMech().hasCompactHeatSinks());
+            panMovement.setFromEntity(getMech());
+            refreshSummary();
+            refresh.refreshPreview();
+            refresh.refreshStatus();
+        }
+    }
+
+    @Override
+    public void gyroChanged(int gyroType) {
+        if (!hasCTSpace(panChassis.getEngine(), gyroType, panChassis.getCockpitType())) {
+            JOptionPane.showMessageDialog(
+                    this, "There is not enough space in the center torso for this gyro.",
+                    "Bad Gyro", JOptionPane.ERROR_MESSAGE);
+            panChassis.removeListener(this);
+            panChassis.setGyroType(getMech().getGyroType());
+            panChassis.addListener(this);
+        } else {
+            getMech().setGyroType(gyroType);
+            resetSystemCrits();
+        }
+        refreshSummary();
+        refresh.refreshPreview();
+        refresh.refreshStatus();
+    }
+
+    @Override
+    public void cockpitChanged(int cockpitType) {
+        if (!hasCTSpace(panChassis.getEngine(), panChassis.getGyroType(), cockpitType)) {
+            JOptionPane.showMessageDialog(
+                    this, "There is not enough space in the center torso for this cockpit.",
+                    "Bad Gyro", JOptionPane.ERROR_MESSAGE);
+            panChassis.removeListener(this);
+            panChassis.setCockpitType(getMech().getCockpitType());
+            panChassis.addListener(this);
+        } else {
+            getMech().setCockpitType(cockpitType);
+            resetSystemCrits();
+            refreshSummary();
+            refresh.refreshPreview();
+            refresh.refreshStatus();
+        }
+    }
+
+    @Override
+    public void enhancementChanged(EquipmentType enhancement) {
+        UnitUtil.removeEnhancements(getMech());
+        if (null != enhancement) {
+            if (enhancement.hasFlag(MiscType.F_MASC)) {
+                Mounted mount = new Mounted(getMech(), enhancement);
+                try {
+                    getMech().addEquipment(mount, Entity.LOC_NONE, false);
+                } catch (LocationFullException lfe) {
+                    // this can't happen, we add to Entity.LOC_NONE
+                }
+            } else {
+                UnitUtil.createSpreadMounts(getMech(), enhancement);
+            }
+        }
+        refresh.refreshBuild();
+        refresh.refreshPreview();
+        refresh.refreshStatus();
+    }
+
+    @Override
+    public void fullHeadEjectChanged(boolean eject) {
+        getMech().setFullHeadEject(eject);
+    }
+
+    @Override
+    public void resetChassis() {
+        UnitUtil.resetBaseChassis(getMech());
+        refresh.refreshAll();
+    }
+
+    @Override
+    public void heatSinksChanged(int index, int count) {
+        // Method for ASFs
+    }
+
+    @Override
+    public void heatSinksChanged(EquipmentType hsType, int count) {
+        // if we have the same type of heat sink, then we should not remove the
+        // existing heat sinks
+        int currentSinks = UnitUtil.countActualHeatSinks(getMech());
+        if (getMech().hasWorkingMisc(hsType.getInternalName())) {
+            if (count < currentSinks) {
+                UnitUtil.removeHeatSinks(getMech(), currentSinks - count);
+            } else if (count > currentSinks) {
+                UnitUtil.addHeatSinkMounts(getMech(), count - currentSinks,
+                        hsType);
+            }
+        } else {
+            UnitUtil.removeHeatSinks(getMech(), count);
+            UnitUtil.addHeatSinkMounts(getMech(), count, hsType);
+        }
+        getMech().resetSinks();
+        panSummary.refresh();
+        refresh.refreshBuild();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void heatSinkBaseCountChanged(int count) {
+        getMech().getEngine().setBaseChassisHeatSinks(
+                Math.max(0, count));
+        UnitUtil.updateAutoSinks(getMech(), panHeat.getHeatSinkType().hasFlag(MiscType.F_COMPACT_HEAT_SINK));
+        refresh.refreshBuild();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void armorTypeChanged(int at, int aTechLevel) {
+        if (at != EquipmentType.T_ARMOR_PATCHWORK) {
+            UnitUtil.removeISorArmorMounts(getMech(), false);
+            createArmorMountsAndSetArmorType(at, aTechLevel);
+            panArmorAllocation.showPatchwork(false);
+            panPatchwork.setVisible(false);
+        } else {
+            panPatchwork.setFromEntity(getMech());
+            panArmorAllocation.showPatchwork(true);
+            panPatchwork.setVisible(true);
+        }
+        panArmor.setFromEntity(getMech(), true);
+        panArmorAllocation.setFromEntity(getMech());
+        panSummary.refresh();
+        refresh.refreshStatus();
+        refresh.refreshBuild();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void armorTonnageChanged(double tonnage) {
+        getMech().setArmorTonnage(Math.round(tonnage * 2) / 2.0);
+        panArmorAllocation.setFromEntity(getMech());
+        panSummary.refresh();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void maximizeArmor() {
+        double maxArmor = UnitUtil.getMaximumArmorTonnage(getMech());
+        getMech().setArmorTonnage(maxArmor);
+        panArmor.removeListener(this);
+        panArmor.setFromEntity(getMech());
+        panArmor.addListener(this);
+
+        panArmorAllocation.setFromEntity(getMech());
+        panSummary.refresh();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void useRemainingTonnageArmor() {
+        double currentTonnage = UnitUtil.getEntityVerifier(getMech())
+                .calculateWeight();
+        currentTonnage += UnitUtil.getUnallocatedAmmoTonnage(getMech());
+        double totalTonnage = getMech().getWeight();
+        double remainingTonnage = TestEntity.floor(
+                totalTonnage - currentTonnage, TestEntity.Ceil.HALFTON);
+
+        double maxArmor = Math.min(getMech().getArmorWeight() + remainingTonnage,
+                UnitUtil.getMaximumArmorTonnage(getMech()));
+        getMech().setArmorTonnage(maxArmor);
+        panArmor.removeListener(this);
+        panArmor.setFromEntity(getMech());
+        panArmor.addListener(this);
+
+        panArmorAllocation.setFromEntity(getMech());
+        panSummary.refresh();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+    }
+
+    @Override
+    public void walkChanged(int walkMP) {
+        if (!recalculateEngineRating(walkMP, panChassis.getTonnage())) {
+            panMovement.setFromEntity(getMech());
+            return;
+        }
+        getMech().setOriginalWalkMP(walkMP);
+        panSummary.refresh();
+        refresh.refreshBuild();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+        panMovement.setFromEntity(getMech());
+        panHeat.setFromMech(getMech());
+        panChassis.refresh();
+    }
+
+    @Override
+    public void jumpChanged(int jumpMP, EquipmentType jumpJet) {
+        // Don't set jumpMP for UMU.
+        if (null == jumpJet) {
+            getMech().setOriginalJumpMP(0);
+            jumpMP = 0;
+        } else if (jumpJet.hasFlag(MiscType.F_JUMP_JET) || jumpJet.hasFlag(MiscType.F_JUMP_BOOSTER)) {
+            getMech().setOriginalJumpMP(jumpMP);
+        } else {
+            getMech().setOriginalJumpMP(0);
+        }
+        List<Mounted> jjs = getMech().getMisc().stream()
+                .filter(m -> m.getType() == jumpJet)
+                .collect(Collectors.toList());
+        if (jumpJet.hasFlag(MiscType.F_JUMP_BOOSTER)) {
+            if (!getMech().hasWorkingMisc(MiscType.F_JUMP_BOOSTER)) {
+                UnitUtil.createSpreadMounts(getMech(), jumpJet);
+            }
+        } else {
+            while (jjs.size() > jumpMP) {
+                UnitUtil.removeMounted(getMech(), jjs.remove(jjs.size() - 1));
+            }
+            while (jumpMP > jjs.size()) {
+                try {
+                    UnitUtil.addMounted(getMech(), new Mounted(getMech(), jumpJet),
+                            Entity.LOC_NONE, false);
+                } catch (LocationFullException e) {
+                    // Adding to LOC_NONE
+                }
+                jumpMP--;
+            }
+        }
+        panSummary.refresh();
+        refresh.refreshBuild();
+        refresh.refreshStatus();
+        refresh.refreshPreview();
+        panMovement.setFromEntity(getMech());
+    }
+
+    @Override
+    public void jumpTypeChanged(final EquipmentType jumpJet) {
+        List<Mounted> jjs = getMech().getMisc().stream()
+                .filter(m -> m.getType().hasFlag(MiscType.F_JUMP_JET)
+                        || m.getType().hasFlag(MiscType.F_UMU)
+                        || m.getType().hasFlag(MiscType.F_JUMP_BOOSTER))
+                .filter(m -> m.getType() != jumpJet)
+                .collect(Collectors.toList());
+        jjs.forEach(jj -> UnitUtil.removeMounted(getMech(), jj));
+        jumpChanged(panMovement.getJump(), jumpJet);
+    }
+
+    @Override
+    public void armorPointsChanged(int location, int front, int rear) {
+        getMech().initializeArmor(front, location);
+        if (getMech().hasRearArmor(location)) {
+            getMech().initializeRearArmor(rear, location);
+        }
+        if (panArmor.getArmorType() == EquipmentType.T_ARMOR_PATCHWORK) {
+            getMech().setArmorTonnage(panArmorAllocation.getTotalArmorWeight(getMech()));
+        }
+        panArmor.setFromEntity(getMech(), true);
+        panArmorAllocation.setFromEntity(getMech());
+        refresh.refreshPreview();
+        refresh.refreshSummary();
+        refresh.refreshStatus();
+    }
+
+    @Override
+    public void autoAllocateArmor() {
+        double pointsToAllocate = UnitUtil.getArmorPoints(getMech(), getMech().getLabArmorTonnage());
+        double maxArmor = UnitUtil.getMaximumArmorPoints(getMech());
+        if (pointsToAllocate > maxArmor) {
+            pointsToAllocate = maxArmor;
+        }
+        double percent = pointsToAllocate / maxArmor;
+        int headMaxArmor = 9;
+        if (getMech().isSuperHeavy()) {
+            headMaxArmor = 12;
+        }
+        // put 5 times the percentage of total possible armor into the head
+        int headArmor = (int) Math.min(Math.floor(percent * headMaxArmor * 5), headMaxArmor);
+        getMech().initializeArmor(headArmor, Mech.LOC_HEAD);
+        pointsToAllocate -= headArmor;
+        maxArmor -= headMaxArmor;
+        // recalculate percentage for remainder
+        percent = pointsToAllocate / maxArmor;
+        for (int location = 0; location < getMech().locations(); location++) {
+            double IS = (getMech().getInternal(location) * 2);
+            double allocate = Math.min(IS * percent, pointsToAllocate);
+            switch (location) {
+                case Mech.LOC_HEAD:
+                    break;
+                case Mech.LOC_CT:
+                case Mech.LOC_LT:
+                case Mech.LOC_RT:
+                    int rear = (int) Math.floor(allocate * .25);
+                    int front = (int) Math.ceil(allocate * .75);
+                    // Make sure rounding doesn't add an additional point to this location,
+                    // which could cause us to run out of armor before we get to the end.
+                    if (rear + front > allocate) {
+                        if (front > rear * 3) {
+                            front--;
+                        } else {
+                            rear--;
+                        }
+                    }
+                    pointsToAllocate -= rear;
+                    pointsToAllocate -= front;
+                    getMech().initializeArmor(front, location);
+                    getMech().initializeRearArmor(rear, location);
+                    break;
+                default:
+                    getMech().initializeArmor((int) allocate, location);
+                    pointsToAllocate -= (int) allocate;
+                    break;
+            }
+        }
+        allocateLeftoverPoints(pointsToAllocate);
+
+        panArmorAllocation.setFromEntity(getMech());
+        refresh.refreshPreview();
+        refresh.refreshSummary();
+        refresh.refreshStatus();
     }
 
     /**
-     * resets all the various combo boxes with appropriate options based on the
-     * tech base and tech level of the unit. This should NEVER be run when
-     * listeners are turned on. If the updateUnit boolean is set to true, then
-     * this method will check that the values of the current unit are available
-     * as choices after populating the choices and if not it will reset them to
-     * default values on the unit itself.
+     * allocate any leftover points one-by-one
      *
-     * @param updateUnit
+     * @param points
+     *            the amount of points left over
      */
-    private void populateChoices(boolean updateUnit) {
-
-        boolean isClan = getMech().isClan();
-        boolean isMixed = getMech().isMixedTech();
-        boolean isExperimental = (getMech().getTechLevel() == TechConstants.T_IS_EXPERIMENTAL)
-                || (getMech().getTechLevel() == TechConstants.T_CLAN_EXPERIMENTAL)
-                || (getMech().getTechLevel() == TechConstants.T_IS_UNOFFICIAL)
-                || (getMech().getTechLevel() == TechConstants.T_CLAN_UNOFFICIAL);
-        boolean isAdvanced = (getMech().getTechLevel() == TechConstants.T_IS_ADVANCED)
-                || (getMech().getTechLevel() == TechConstants.T_CLAN_ADVANCED)
-                || (getMech().getTechLevel() == TechConstants.T_IS_EXPERIMENTAL)
-                || (getMech().getTechLevel() == TechConstants.T_CLAN_EXPERIMENTAL)
-                || (getMech().getTechLevel() == TechConstants.T_IS_UNOFFICIAL)
-                || (getMech().getTechLevel() == TechConstants.T_CLAN_UNOFFICIAL);
-
-        // advanced means we allow ultra-light mechs
-        if (!isAdvanced) {
-            ((SpinnerNumberModel) weightClass.getModel()).setMinimum(20);
-        } else {
-            ((SpinnerNumberModel) weightClass.getModel()).setMinimum(10);
-        }
-        // advanced IS means we allow super-heavy mechs
-        if (!isClan && isAdvanced) {
-            ((SpinnerNumberModel) weightClass.getModel()).setMaximum(200);
-        } else {
-            ((SpinnerNumberModel) weightClass.getModel()).setMaximum(100);
-        }
-
-        /* ARMOR */
-        armorCombo.removeAllItems();
-        for (int index = 0; index < (EquipmentType.armorNames.length); index++) {
-            EquipmentType et;
-            if (!isMixed) {
-                et = EquipmentType.get(EquipmentType.getArmorTypeName(index,
-                        isClan));
-                if (((index == EquipmentType.T_ARMOR_PATCHWORK) && isExperimental)
-                        || ((et != null)
-                                && et.hasFlag(MiscType.F_MECH_EQUIPMENT) && (TechConstants
-                                    .isLegal(getMech().getTechLevel(), et
-                                            .getTechLevel(getMech().getYear()),
-                                            isMixed)))) {
-                    armorCombo.addItem(EquipmentType.armorNames[index]);
-                }
-            } else {
-                et = EquipmentType.get(EquipmentType.getArmorTypeName(index,
-                        true));
-                if (et != null) {
-                    armorCombo.addItem(EquipmentType.getArmorTypeName(index,
-                            true));
-                }
-                et = EquipmentType.get(EquipmentType.getArmorTypeName(index,
-                        false));
-                if (et != null) {
-                    armorCombo.addItem(EquipmentType.getArmorTypeName(index,
-                            false));
-                }
-                if (index == EquipmentType.T_ARMOR_PATCHWORK) {
-                    armorCombo.addItem(EquipmentType.getArmorTypeName(index));
-                }
-            }
-        }
-
-        /* ENGINE */
-        int engineCount = 1;
-        String[] engineList = new String[0];
-
-        engineType.removeAllItems();
-
-        if (isMixed) {
-            if (isClan) {
-                engineCount = clanEngineTypes.length + isEngineTypes.length;
-                engineList = new String[engineCount];
-                int clanPos = 0;
-                int enginePos = 0;
-                for (String isEngine : isEngineTypes) {
-                    if (clanEngineTypes[clanPos].equals(isEngine)) {
-                        engineList[enginePos] = clanEngineTypes[clanPos];
-                        clanPos++;
-                        enginePos++;
-                    }
-                    engineList[enginePos] = String
-                            .format("(IS) %1$s", isEngine);
-                    enginePos++;
-                }
-            } else {
-                engineCount = clanEngineTypes.length + isEngineTypes.length;
-                engineList = new String[engineCount];
-                int clanPos = 0;
-                int enginePos = 0;
-                for (String isEngine : isEngineTypes) {
-                    engineList[enginePos] = isEngine;
-                    enginePos++;
-                    if (clanEngineTypes[clanPos].equals(isEngine)) {
-                        engineList[enginePos] = String.format("(Clan) %1$s",
-                                clanEngineTypes[clanPos]);
-                        clanPos++;
-                        enginePos++;
-                    }
-                }
-            }
-        } else {
-            if (isClan) {
-                clanEngineFlag = Engine.CLAN_ENGINE;
-                if (getMech().isIndustrial() || getMech().isPrimitive()) {
-                    engineList = clanIndustrialEngineTypes;
-                    engineCount = clanIndustrialEngineTypes.length;
-                } else {
-                    engineList = clanEngineTypes;
-                    switch (getMech().getTechLevel()) {
-                        case TechConstants.T_INTRO_BOXSET:
-                            engineCount = 1;
-                            break;
-                        case TechConstants.T_CLAN_TW:
-                        case TechConstants.T_IS_TW_NON_BOX:
-                            engineCount = 2;
-                            break;
-                        case TechConstants.T_CLAN_ADVANCED:
-                        case TechConstants.T_IS_ADVANCED:
-                            engineCount = 3;
-                            break;
-                        case TechConstants.T_CLAN_EXPERIMENTAL:
-                        case TechConstants.T_IS_EXPERIMENTAL:
-                            engineCount = 5;
-                            break;
-                        case TechConstants.T_CLAN_UNOFFICIAL:
-                        case TechConstants.T_IS_UNOFFICIAL:
-                            engineCount = 5;
-                            break;
-                    }
-                }
-            } else {
-                clanEngineFlag = 0;
-                if (getMech().isIndustrial() || getMech().isPrimitive()) {
-                    engineList = isIndustrialEngineTypes;
-                    engineCount = isIndustrialEngineTypes.length;
-                    if (getMech().isSuperHeavy()) {
-                        engineCount = 1;
-                        superHeavyEngineFlag = Engine.SUPERHEAVY_ENGINE;
-                    } else {
-                        superHeavyEngineFlag = 0;
-                    }
-                } else {
-                    if (getMech().isSuperHeavy()) {
-                        engineList = isSuperHeavyEngineTypes;
-                        engineCount = isSuperHeavyEngineTypes.length;
-                        superHeavyEngineFlag = Engine.SUPERHEAVY_ENGINE;
-                        switch (getMech().getTechLevel()) {
-                            case TechConstants.T_IS_ADVANCED:
-                                engineCount = isSuperHeavyEngineTypes.length - 1;
-                                break;
-                            case TechConstants.T_IS_EXPERIMENTAL:
-                            case TechConstants.T_IS_UNOFFICIAL:
-                                engineCount = isSuperHeavyEngineTypes.length;
-                                break;
-                        }
-                    } else {
-                        superHeavyEngineFlag = 0;
-                        engineList = isEngineTypes;
-                        switch (getMech().getTechLevel()) {
-                            case TechConstants.T_INTRO_BOXSET:
-                                engineCount = 1;
-                                break;
-                            case TechConstants.T_CLAN_TW:
-                            case TechConstants.T_IS_TW_NON_BOX:
-                                engineCount = 4;
-                                break;
-                            case TechConstants.T_CLAN_ADVANCED:
-                            case TechConstants.T_IS_ADVANCED:
-                                engineCount = 6;
-                                break;
-                            case TechConstants.T_CLAN_EXPERIMENTAL:
-                            case TechConstants.T_IS_EXPERIMENTAL:
-                                engineCount = 8;
-                                break;
-                            case TechConstants.T_CLAN_UNOFFICIAL:
-                            case TechConstants.T_IS_UNOFFICIAL:
-                                engineCount = 8;
-                                break;
-                        }
-                    }
-
-                }
-            }
-        }
-        for (int index = 0; index < engineCount; index++) {
-            engineType.addItem(engineList[index]);
-        }
-
-        /* COCKPIT */
-        cockpitType.removeAllItems();
-
+    private void allocateLeftoverPoints(double points) {
+        int headMaxArmor = 9;
         if (getMech().isSuperHeavy()) {
-            if (getMech() instanceof TripodMech) {
-                cockpitType
-                        .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SUPERHEAVY_TRIPOD]);
-            } else {
-                cockpitType
-                        .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SUPERHEAVY]);
-                if (isExperimental
-                        || (getMech().getTechLevel() == TechConstants.T_CLAN_ADVANCED)
-                        || (getMech().getTechLevel() == TechConstants.T_IS_ADVANCED)) {
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                }
-            }
-        } else {
-            switch (getMech().getTechLevel()) {
-                case TechConstants.T_INTRO_BOXSET:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    break;
-                case TechConstants.T_CLAN_TW:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    break;
-                case TechConstants.T_IS_TW_NON_BOX:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    break;
-                case TechConstants.T_CLAN_ADVANCED:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                    break;
-                case TechConstants.T_IS_ADVANCED:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                    break;
-                case TechConstants.T_CLAN_EXPERIMENTAL:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_TORSO_MOUNTED]);
-                    break;
-                case TechConstants.T_IS_EXPERIMENTAL:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_TORSO_MOUNTED]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INTERFACE]);
-                    break;
-                case TechConstants.T_CLAN_UNOFFICIAL:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_TORSO_MOUNTED]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_DUAL]);
-
-                    break;
-                case TechConstants.T_IS_UNOFFICIAL:
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_STANDARD]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_SMALL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_COMMAND_CONSOLE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_PRIMITIVE_INDUSTRIAL]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_TORSO_MOUNTED]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_INTERFACE]);
-                    cockpitType
-                            .addItem(Mech.COCKPIT_SHORT_STRING[Mech.COCKPIT_DUAL]);
-                    break;
-            }
+            headMaxArmor = 12;
         }
-
-        /* INTERNAL STRUCTURE */
-        structureCombo.removeAllItems();
-        for (String structure : getStructureTypes()) {
-            structureCombo.addItem(structure);
-        }
-
-        /* HEAT SINKS */
-        int heatSinkCount = 0;
-        String[] heatSinkList;
-        heatSinkType.removeAllItems();
-
-        if (isMixed) {
-            heatSinkCount = (clanHeatSinkTypes.length + isHeatSinkTypes.length) - 1;
-            heatSinkList = new String[heatSinkCount];
-            int clanPos = 1;
-            int heatSinkPos = 0;
-            if (isClan) {
-                clanPos = 0;
-                for (String isHeatSink : isHeatSinkTypes) {
-                    heatSinkList[heatSinkPos] = clanHeatSinkTypes[clanPos];
-                    heatSinkPos++;
-                    clanPos++;
-                    if (isHeatSink.equals("Single")) {
-                        continue;
-                    }
-                    heatSinkList[heatSinkPos] = String.format("(IS) %1$s",
-                            isHeatSink);
-                    heatSinkPos++;
+        while (points >= 1) {
+            // if two or more are left, add armor to symmetrical locations,
+            // to torso, legs, arms, in that order
+            if (points >= 2) {
+                if (((getMech().getOArmor(Mech.LOC_LT) + getMech().getOArmor(Mech.LOC_LT,
+                        true)) < (getMech().getOInternal(Mech.LOC_LT) * 2))
+                        && ((getMech().getOArmor(Mech.LOC_RT) + getMech().getOArmor(
+                                Mech.LOC_RT, true)) < (getMech()
+                                        .getOInternal(Mech.LOC_RT) * 2))) {
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_LT) + 1,
+                            Mech.LOC_LT);
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_RT) + 1,
+                            Mech.LOC_RT);
+                    points -= 2;
+                } else if ((getMech().getOArmor(Mech.LOC_LLEG) < (getMech()
+                        .getOInternal(Mech.LOC_LLEG) * 2))
+                        && (getMech().getOArmor(Mech.LOC_RLEG) < (getMech()
+                                .getOInternal(Mech.LOC_RLEG) * 2))) {
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_LLEG) + 1,
+                            Mech.LOC_LLEG);
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_RLEG) + 1,
+                            Mech.LOC_RLEG);
+                    points -= 2;
+                } else if ((getMech().getOArmor(Mech.LOC_LARM) < (getMech()
+                        .getOInternal(Mech.LOC_LARM) * 2))
+                        && (getMech().getOArmor(Mech.LOC_RARM) < (getMech()
+                                .getOInternal(Mech.LOC_RARM) * 2))) {
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_LARM) + 1,
+                            Mech.LOC_LARM);
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_RARM) + 1,
+                            Mech.LOC_RARM);
+                    points -= 2;
                 }
-            } else {
-                for (String isHeatSink : isHeatSinkTypes) {
-                    heatSinkList[heatSinkPos] = isHeatSink;
-                    heatSinkPos++;
-                    if (clanPos < clanHeatSinkTypes.length) {
-                        heatSinkList[heatSinkPos] = String.format(
-                                "(Clan) %1$s", clanHeatSinkTypes[clanPos]);
-                    }
-                    clanPos++;
-                    heatSinkPos++;
+                // otherwise, first add to the head, and then even out uneven
+                // allocation
+            } else if (getMech().getOArmor(Mech.LOC_HEAD) < headMaxArmor) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_HEAD) + 1,
+                        Mech.LOC_HEAD);
+                points--;
+            } else if (getMech().getOArmor(Mech.LOC_LT) < getMech()
+                    .getOArmor(Mech.LOC_RT)) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_LT) + 1,
+                        Mech.LOC_LT);
+                points--;
+            } else if (getMech().getOArmor(Mech.LOC_RT) < getMech()
+                    .getOArmor(Mech.LOC_LT)) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_RT) + 1,
+                        Mech.LOC_RT);
+                points--;
+            } else if (getMech().getOArmor(Mech.LOC_RARM) < getMech()
+                    .getOArmor(Mech.LOC_LARM)) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_RARM) + 1,
+                        Mech.LOC_RARM);
+                points--;
+            } else if (getMech().getOArmor(Mech.LOC_LARM) < getMech()
+                    .getOArmor(Mech.LOC_RARM)) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_LARM) + 1,
+                        Mech.LOC_LARM);
+                points--;
+            } else if (getMech().getOArmor(Mech.LOC_RLEG) < getMech()
+                    .getArmor(Mech.LOC_LLEG)) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_RLEG) + 1,
+                        Mech.LOC_RLEG);
+                points--;
+            } else if (getMech().getOArmor(Mech.LOC_LLEG) < getMech()
+                    .getOArmor(Mech.LOC_RLEG)) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_LLEG) + 1,
+                        Mech.LOC_LLEG);
+                points--;
+                // if nothing is uneven, add to the CT
+            } else if (((getMech().getOArmor(Mech.LOC_CT) + getMech().getOArmor(
+                    Mech.LOC_CT, true)) < (getMech().getOInternal(Mech.LOC_CT) * 2))) {
+                getMech().initializeArmor(getMech().getOArmor(Mech.LOC_CT) + 1,
+                        Mech.LOC_CT);
+                points--;
+            }
+            // if only one is left, and head and CT have max, remove one from CT
+            // so symmetric locations can get extra, unless they are already at
+            // max
+            if (points == 1) {
+                if ((getMech().getOArmor(Mech.LOC_HEAD) == headMaxArmor)
+                        && ((getMech().getOArmor(Mech.LOC_CT) + getMech().getOArmor(
+                                Mech.LOC_CT, true)) == (getMech()
+                                        .getOInternal(Mech.LOC_CT) * 2))) {
+                    getMech().initializeArmor(getMech().getOArmor(Mech.LOC_CT) - 1,
+                            Mech.LOC_CT);
+                    points++;
                 }
             }
-        } else {
-            if (isClan) {
-
-                heatSinkCount = clanHeatSinkTypes.length;
-                heatSinkList = clanHeatSinkTypes;
-
-                switch (getMech().getTechLevel()) {
-                    case TechConstants.T_CLAN_TW:
-                        heatSinkCount = 2;
+            // if all locations have max, return
+            boolean toReturn = true;
+            for (int location = 0; location < getMech().locations(); location++) {
+                double is = (getMech().getInternal(location) * 2);
+                switch (location) {
+                    case Mech.LOC_HEAD:
+                        int headPoints = 3;
+                        if (getMech().isSuperHeavy()) {
+                            headPoints = 4;
+                        }
+                        if ((is + headPoints) > getMech().getOArmor(location)) {
+                            toReturn = false;
+                        }
                         break;
-                    case TechConstants.T_CLAN_ADVANCED:
-                    case TechConstants.T_CLAN_EXPERIMENTAL:
-                    case TechConstants.T_CLAN_UNOFFICIAL:
-                        heatSinkCount = 3;
+                    case Mech.LOC_CT:
+                    case Mech.LOC_LT:
+                    case Mech.LOC_RT:
+                        if (is > (getMech().getOArmor(location) + getMech().getOArmor(
+                                location, true))) {
+                            toReturn = false;
+                        }
                         break;
-                }
-            } else {
-                heatSinkList = isHeatSinkTypes;
-                switch (getMech().getTechLevel()) {
-                    case TechConstants.T_INTRO_BOXSET:
-                        heatSinkCount = 1;
-                        break;
-                    case TechConstants.T_IS_TW_NON_BOX:
-                    case TechConstants.T_IS_ADVANCED:
-                        heatSinkCount = 2;
-                        break;
-                    case TechConstants.T_IS_EXPERIMENTAL:
-                    case TechConstants.T_IS_UNOFFICIAL:
-                        heatSinkCount = 3;
+                    default:
+                        if (is > getMech().getOArmor(location)) {
+                            toReturn = false;
+                        }
                         break;
                 }
             }
-        }
-
-        for (int index = 0; index < heatSinkCount; index++) {
-            heatSinkType.addItem(heatSinkList[index]);
-        }
-
-        /* JUMP JETS */
-        int jjCount = 0;
-        jjType.removeAllItems();
-
-        switch (getMech().getTechLevel()) {
-            case TechConstants.T_INTRO_BOXSET:
-                jjCount = 1;
-                break;
-            case TechConstants.T_IS_EXPERIMENTAL:
-                jjCount = jjTypes.length;
-                break;
-            default:
-                jjCount = 2;
-        }
-
-        for (int index = 0; index < jjCount; index++) {
-            jjType.addItem(jjTypes[index]);
-        }
-
-        /* GYRO */
-        String[] gyroList = new String[0];
-        gyroType.removeAllItems();
-
-        if (isMixed) {
-            if (isClan) {
-                int gyroPos = 0;
-                gyroList = new String[Mech.GYRO_SHORT_STRING.length];
-                for (String gyro : Mech.GYRO_SHORT_STRING) {
-                    if (gyroPos == 0) {
-                        gyroList[gyroPos] = gyro;
-                    } else {
-                        gyroList[gyroPos] = String.format("(IS) %1$s", gyro);
-                    }
-                    gyroPos++;
-                }
-            } else {
-                gyroList = Mech.GYRO_SHORT_STRING.clone();
-            }
-        } else {
-            if (isClan) {
-                gyroList = new String[1];
-                gyroList[0] = Mech.GYRO_SHORT_STRING[0];
-            } else {
-                gyroList = Mech.GYRO_SHORT_STRING.clone();
-            }
-        }
-        if (getMech().getTechLevel() <= TechConstants.T_INTRO_BOXSET) {
-            gyroList = new String[1];
-            gyroList[0] = Mech.GYRO_SHORT_STRING[0];
-        }
-        for (String gyro : gyroList) {
-            if (gyro.equals(Mech.GYRO_SHORT_STRING[Mech.GYRO_NONE])
-                    && !(getMech().getCockpitType() == Mech.COCKPIT_INTERFACE)) {
-                continue;
-            }
-            gyroType.addItem(gyro);
-        }
-
-        /* ENHANCEMENTS */
-        enhancement.removeAllItems();
-        enhancement.addItem("None");
-        if (getMech().getTechLevel() > TechConstants.T_INTRO_BOXSET) {
-            enhancement.addItem("MASC");
-            if (!TechConstants.isClan(getMech().getTechLevel())) {
-                if (getMech().isIndustrial()) {
-                    enhancement.addItem("Industrial TSM");
-                } else {
-                    enhancement.addItem("TSM");
-                }
-            }
-        }
-
-        /* UNIT UPDATING */
-        if (updateUnit) {
-            // if we're ultra-light, and not at least advanced any more, revert
-            // to 20 tons
-            if (!isAdvanced && (getMech().getWeight() < 20)) {
-                getMech().setWeight(20);
-            }
-            // if we're clan or not at least advanced, and super heavy, revert
-            // to 100 tons
-            if ((isClan || !isAdvanced) && (getMech().getWeight() > 100)) {
-                getMech().setWeight(100);
-                getMech().clearCockpitCrits();
-                getMech().addCockpit();
-                UnitUtil.resetCriticalsAndMounts(getMech());
-            }
-            setArmorCombo(getMech().getArmorType(0));
-            if (armorCombo.getSelectedIndex() == -1) {
-                armorCombo.setSelectedIndex(0);
-                UnitUtil.removeISorArmorMounts(getMech(), false);
-                createArmorMountsAndSetArmorType();
-                armor.resetArmorPoints();
-            }
-            int selEngine = convertEngineType(getMech().getEngine()
-                    .getEngineType());
-            if (engineType.getItemCount() <= selEngine) {
-                selEngine = -1;
-            }
-            engineType.setSelectedIndex(selEngine);
-            if (engineType.getSelectedIndex() == -1) {
-                engineType.setSelectedIndex(0);
-                resetEngine();
-            }
-            setStructureCombo();
-            if (structureCombo.getSelectedIndex() == -1) {
-                structureCombo.setSelectedIndex(0);
-                UnitUtil.removeISorArmorMounts(getMech(), true);
-                createISMounts();
-            }
-            cockpitType.setSelectedIndex(-1);
-            String selItem = Mech.COCKPIT_SHORT_STRING[getMech()
-                    .getCockpitType()];
-            for (int i = 0; i < cockpitType.getItemCount(); i++) {
-                if (cockpitType.getItemAt(i).equals(selItem)) {
-                    cockpitType.setSelectedIndex(i);
-                    break;
-                }
-            }
-            if (cockpitType.getSelectedIndex() == -1) {
-                cockpitType.setSelectedIndex(0);
-                getMech().clearCockpitCrits();
-                getMech().addCockpit();
-            }
-            setHeatSinkCombo();
-            if (heatSinkType.getSelectedIndex() == -1) {
-                heatSinkType.setSelectedIndex(0);
-                UnitUtil.updateHeatSinks(getMech(),
-                        (Integer) heatSinkNumber.getValue(), "Single");
-            }
-            setJumpJetCombo();
-            if (jjType.getSelectedIndex() == -1) {
-                jjType.setSelectedIndex(0);
-                int jump = Math.min(jumpModel.getNumJets(), getMech()
-                        .getWalkMP(true, false, true));
-                UnitUtil.updateJumpJets(getMech(), jump, Mech.JUMP_STANDARD);
-            }
-            int selGyro = getMech().getGyroType();
-            if (gyroType.getItemCount() <= selGyro) {
-                selGyro = -1;
-            }
-            gyroType.setSelectedIndex(selGyro);
-            if (gyroType.getSelectedIndex() == -1) {
-                gyroType.setSelectedIndex(0);
-                getMech().clearGyroCrits();
-                getMech().addGyro();
-            }
-            setEnhancementCombo();
-            if (enhancement.getSelectedIndex() == -1) {
-                enhancement.setSelectedIndex(0);
-                UnitUtil.updateEnhancements(getMech(), false, false);
-            }
-        }
-
-    }
-
-    private void setStructureCombo() {
-
-        if (getMech().isMixedTech()) {
-            String structName;
-            if (getMech().isClan()) {
-                structName = EquipmentType.structureNames[getMech()
-                        .getStructureType()];
-                if ((getMech().getStructureType() != EquipmentType.T_STRUCTURE_STANDARD)
-                        && (getMech().getStructureType() != EquipmentType.T_STRUCTURE_INDUSTRIAL)) {
-                    structName = structName + " (IS)";
-                }
-                if (getMech()
-                        .hasWorkingMisc(
-                                "Clan "
-                                        + EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_STEEL])) {
-                    structName = EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_STEEL];
-                } else if (getMech()
-                        .hasWorkingMisc(
-                                "Clan "
-                                        + EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_COMPOSITE])) {
-                    structName = EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_COMPOSITE];
-                }
-            } else {
-                structName = EquipmentType.structureNames[getMech()
-                        .getStructureType()];
-                if (getMech()
-                        .hasWorkingMisc(
-                                "Clan "
-                                        + EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_STEEL])) {
-                    structName = EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_STEEL]
-                            + " (Clan)";
-                } else if (getMech()
-                        .hasWorkingMisc(
-                                "Clan "
-                                        + EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_COMPOSITE])) {
-                    structName = EquipmentType.structureNames[EquipmentType.T_STRUCTURE_ENDO_COMPOSITE]
-                            + " (Clan)";
-                }
-            }
-            structureCombo.setSelectedIndex(-1);
-            structureCombo.setSelectedItem(structName);
-        } else {
-            int structType = getMech().getStructureType();
-            String structTypeName =
-                    EquipmentType.getStructureTypeName(structType);
-            structureCombo.setSelectedItem(structTypeName);
-        }
-    }
-
-    private void setJumpJetCombo() {
-        int selIndex = Math.max(0, getMech().getJumpType() - 1);
-        // Hack because of hidden disposable jump packs
-        if (selIndex == 5) {
-            selIndex--;
-        }
-        if (jjType.getItemCount() <= selIndex) {
-            selIndex = -1;
-        }
-        jjType.setSelectedIndex(selIndex);
-    }
-
-    private void setEnhancementCombo() {
-        String selEnhance = "None";
-        if ((getMech().hasMASC() && !getMech().hasWorkingMisc(MiscType.F_MASC,
-                MiscType.S_SUPERCHARGER))
-                || getMech().hasMASCAndSuperCharger()) {
-            selEnhance = "MASC";
-        } else if (getMech().hasIndustrialTSM()) {
-            selEnhance = "Industrial TSM";
-        } else if (getMech().hasTSM()) {
-            selEnhance = "TSM";
-        }
-        enhancement.setSelectedIndex(-1);
-        for (int i = 0; i < enhancement.getItemCount(); i++) {
-            if (enhancement.getItemAt(i).equals(selEnhance)) {
-                enhancement.setSelectedIndex(i);
-                break;
+            if (toReturn) {
+                return;
             }
         }
     }
 
     @Override
-    public void stateChanged(ChangeEvent e) {
-        if (e.getSource() instanceof JSpinner) {
-            JSpinner spinner = (JSpinner) e.getSource();
-            removeAllListeners();
-            if (spinner.equals(weightClass)) {
-                boolean changedSuperHeavyStatus = false;
-                if ((getMech().isSuperHeavy() 
-                        && ((Integer) weightClass.getValue() <= 100))
-                        || (!getMech().isSuperHeavy() 
-                                && ((Integer) weightClass.getValue() > 100))) {
-                    // if we switch from being superheavy to not being superheavy,
-                    // remove crits
-                    for (Mounted mount : getMech().getEquipment()) {
-                        if (!UnitUtil.isFixedLocationSpreadEquipment(mount.getType())) {
-                            UnitUtil.removeCriticals(getMech(), mount);
-                            UnitUtil.changeMountStatus(getMech(), mount, Entity.LOC_NONE, Entity.LOC_NONE, false);
-                        }
-                    }
-                    changedSuperHeavyStatus = true;
-                }
-                getMech().setWeight((Integer) weightClass.getValue());
-                getMech().autoSetInternal();
-                resetEngine();
-                if (changedSuperHeavyStatus) {
-                    // Interal structure crits may change
-                    UnitUtil.removeISorArmorMounts(getMech(), true);
-                    createISMounts();
-                }
-                populateChoices(true);
-            } else if (spinner.equals(walkMP)) {
-                resetEngine();
-            } else if (spinner.equals(jumpMP)) {
-                UnitUtil.updateJumpJets(getMech(), jumpModel.getNumJets(),
-                        getJumpJetType());
-            } else if (spinner.equals(armorTonnage)) {
-                setArmorTonnage();
-            } else if (spinner.equals(heatSinkNumber)) {
-                UnitUtil.updateHeatSinks(getMech(), (Integer) heatSinkNumber
-                        .getValue(), heatSinkType.getSelectedItem().toString());
-            } else if (spinner.equals(baseChassisHeatSinks)) {
-                getMech().getEngine().setBaseChassisHeatSinks(
-                        Math.max(0, (Integer) baseChassisHeatSinks.getValue()));
-                UnitUtil.updateAutoSinks(getMech(),
-                        (String) heatSinkType.getSelectedItem());
-            }
-            addAllListeners();
+    public void patchworkChanged(int location, EquipmentType armor) {
+        UnitUtil.resetArmor(getMech(), location);
 
-            refresh.refreshAll();
-        }
-    }
-
-    private boolean resetEngine() {
-        boolean retVal = false;
-        //do {
-            Mech mech = getMech();
-            int rating = ((Integer) walkMP.getValue())
-                    * ((Integer) weightClass.getValue());
-            if (mech.isPrimitive()) {
-                double dRating = ((Integer) walkMP.getValue())
-                        * ((Integer) weightClass.getValue());
-                dRating *= 1.2;
-                if ((dRating % 5) != 0) {
-                    dRating = (dRating - (dRating % 5)) + 5;
-                }
-                rating = (int) dRating;
-            }
-            if ((rating > 400) && (mech.getGyroType() == Mech.GYRO_XL)) {
-                JOptionPane
-                .showMessageDialog(
-                        this,
-                        "That speed would require a large engine, which doesn't fit",
-                        "Bad Engine", JOptionPane.ERROR_MESSAGE);
-            }
-            if (rating > 500) {
-                JOptionPane
-                .showMessageDialog(
-                        this,
-                        "That speed would create an engine with a rating over 500.",
-                        "Bad Engine Rating",
-                        JOptionPane.ERROR_MESSAGE);
-            } else {
-                System.out.println("Clearning engine crits.");
-                mech.clearEngineCrits();
-                System.out.println("Setting new engine rating.");
-                // Create new engine
-                Engine newEngine = new Engine(rating, convertEngineType(engineType
-                        .getSelectedItem().toString()), clanEngineFlag
-                        | superHeavyEngineFlag);
-                // Make sure we keep same number of base heat sinks for omnis
-                newEngine.setBaseChassisHeatSinks(mech.getEngine()
-                        .getBaseChassisHeatSinks(mech.hasCompactHeatSinks()));
-                // Add new engine
-                mech.setEngine(newEngine);
-                System.out.println("Adding engine crits.");
-                mech.addEngineCrits();
-                int autoSinks = mech.getEngine()
-                        .getWeightFreeEngineHeatSinks();
-                System.out.println("Updating # engine heat sinks to "
-                        + autoSinks);
-                UnitUtil.updateAutoSinks(mech,
-                        (String) heatSinkType.getSelectedItem());
-                retVal = true;
-            }
-            // We need a minimum of 1 here...
-            // most useful when we lower tonnage from the default 25 w/out changing settings
-            // as that can return a bad engine
-            /*if (getMech().getOriginalWalkMP() < 1) {
-                walkMP.setValue(((Integer) walkMP.getValue()) + 1);
-            }
-        } while (getMech().getOriginalWalkMP() < 1);*/
-        return retVal;
-    }
-
-    private void maximizeArmor() {
-        double maxArmor = UnitUtil.getMaximumArmorTonnage(getMech());
-        armorTonnage.setValue(maxArmor);
-        getMech().setArmorTonnage(maxArmor);
-        armor.resetArmorPoints();
-    }
-    
-    private void useRemainingTonnageArmor() {
-        float currentTonnage = UnitUtil.getEntityVerifier(getMech())
-                .calculateWeight();
-        currentTonnage += UnitUtil.getUnallocatedAmmoTonnage(getMech());
-        float totalTonnage = getMech().getWeight();
-        float remainingTonnage = TestEntity.floor(
-                totalTonnage - currentTonnage, TestEntity.CEIL_HALFTON);
-        
-        double maxArmor = Math.min(remainingTonnage,
-                UnitUtil.getMaximumArmorTonnage(getMech()));
-        armorTonnage.setValue(maxArmor);
-        getMech().setArmorTonnage(maxArmor);
-        armor.resetArmorPoints();        
-    }
-
-    private void createArmorMountsAndSetArmorType() {
-
-        if (getArmorType(armorCombo) == EquipmentType
-                .getArmorTypeName(EquipmentType.T_ARMOR_PATCHWORK)) {
-            JComboBox<String> headArmor = new JComboBox<String>();
-            headArmor.setName("head");
-            JComboBox<String> laArmor = new JComboBox<String>();
-            laArmor.setName("la");
-            JComboBox<String> ltArmor = new JComboBox<String>();
-            ltArmor.setName("lt");
-            JComboBox<String> ctArmor = new JComboBox<String>();
-            ctArmor.setName("ct");
-            JComboBox<String> rtArmor = new JComboBox<String>();
-            rtArmor.setName("rt");
-            JComboBox<String> raArmor = new JComboBox<String>();
-            raArmor.setName("ra");
-            JComboBox<String> llArmor = new JComboBox<String>();
-            llArmor.setName("ll");
-            JComboBox<String> rlArmor = new JComboBox<String>();
-            rlArmor.setName("rl");
-            boolean isMixed = getMech().isMixedTech();
-            boolean isClan = getMech().isClan();
-            for (int index = 0; index < (EquipmentType.armorNames.length); index++) {
-                EquipmentType et;
-                if (!isMixed) {
-                    et = EquipmentType.get(EquipmentType.getArmorTypeName(
-                            index, isClan));
-                    if ((et != null)
-                            && et.hasFlag(MiscType.F_MECH_EQUIPMENT)
-                            && (TechConstants.isLegal(getMech().getTechLevel(),
-                                    et.getTechLevel(getMech().getYear()),
-                                    isMixed))) {
-                        headArmor.addItem(EquipmentType.armorNames[index]);
-                        laArmor.addItem(EquipmentType.armorNames[index]);
-                        ltArmor.addItem(EquipmentType.armorNames[index]);
-                        ctArmor.addItem(EquipmentType.armorNames[index]);
-                        rtArmor.addItem(EquipmentType.armorNames[index]);
-                        raArmor.addItem(EquipmentType.armorNames[index]);
-                        llArmor.addItem(EquipmentType.armorNames[index]);
-                        rlArmor.addItem(EquipmentType.armorNames[index]);
-                    }
+        //TODO: move this construction data out of the ui
+        int crits = 0;
+        switch (EquipmentType.getArmorType(armor)) {
+            case EquipmentType.T_ARMOR_STEALTH:
+            case EquipmentType.T_ARMOR_FERRO_LAMELLOR:
+                crits = 2;
+                break;
+            case EquipmentType.T_ARMOR_HEAVY_FERRO:
+                crits = 3;
+                break;
+            case EquipmentType.T_ARMOR_LIGHT_FERRO:
+                crits = 1;
+                break;
+            case EquipmentType.T_ARMOR_FERRO_FIBROUS:
+            case EquipmentType.T_ARMOR_REFLECTIVE:
+            case EquipmentType.T_ARMOR_REACTIVE:
+                if (armor.isClan()) {
+                    crits = 1;
                 } else {
-                    et = EquipmentType.get(EquipmentType.getArmorTypeName(
-                            index, true));
-                    if (et != null) {
-                        headArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        laArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        ltArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        ctArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        rtArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        raArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        llArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                        rlArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                true));
-                    }
-                    et = EquipmentType.get(EquipmentType.getArmorTypeName(
-                            index, false));
-                    if (et != null) {
-                        headArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        laArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        ltArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        ctArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        rtArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        raArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        llArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                        rlArmor.addItem(EquipmentType.getArmorTypeName(index,
-                                false));
-                    }
+                    crits = 2;
                 }
-            }
-            setArmorType(headArmor, getMech().getArmorType(Mech.LOC_HEAD), false);
-            setArmorType(laArmor, getMech().getArmorType(Mech.LOC_LARM), false);
-            setArmorType(ltArmor, getMech().getArmorType(Mech.LOC_LT), false);
-            setArmorType(ctArmor, getMech().getArmorType(Mech.LOC_CT), false);
-            setArmorType(rtArmor, getMech().getArmorType(Mech.LOC_RT), false);
-            setArmorType(raArmor, getMech().getArmorType(Mech.LOC_RARM), false);
-            setArmorType(llArmor, getMech().getArmorType(Mech.LOC_LLEG), false);
-            setArmorType(rlArmor, getMech().getArmorType(Mech.LOC_RLEG), false);
-            JLabel headLabel = new JLabel("Head:");
-            JLabel laLabel = new JLabel(getMech() instanceof QuadMech ?
-                "Front Left Leg:" : "Left Arm:");
-            JLabel ltLabel = new JLabel("Left Torso:");
-            JLabel ctLabel = new JLabel("Center Torso:");
-            JLabel rtLabel = new JLabel("Right Torso:");
-            JLabel raLabel = new JLabel(getMech() instanceof QuadMech ?
-                "Front Right Leg:" : "Right Arm:");
-            JLabel llLabel = new JLabel(getMech() instanceof QuadMech ?
-                "Rear Left Leg:" : "Left Leg:");
-            JLabel rlLabel = new JLabel(getMech() instanceof QuadMech ?
-                "Rear Right Leg:" : "Right Leg:");
-            JPanel panel = new JPanel(new GridBagLayout());
-            panel.add(headLabel, GBC.std());
-            panel.add(headArmor, GBC.eol());
-            panel.add(laLabel, GBC.std());
-            panel.add(laArmor, GBC.eol());
-            panel.add(ltLabel, GBC.std());
-            panel.add(ltArmor, GBC.eol());
-            panel.add(ctLabel, GBC.std());
-            panel.add(ctArmor, GBC.eol());
-            panel.add(rtLabel, GBC.std());
-            panel.add(rtArmor, GBC.eol());
-            panel.add(raLabel, GBC.std());
-            panel.add(raArmor, GBC.eol());
-            panel.add(llLabel, GBC.std());
-            panel.add(llArmor, GBC.eol());
-            panel.add(rlLabel, GBC.std());
-            panel.add(rlArmor, GBC.eol());
-            JOptionPane.showMessageDialog(this, panel,
-                    "Please choose the armor types",
-                    JOptionPane.QUESTION_MESSAGE);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(headArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_HEAD);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(laArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_LARM);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(ltArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_LT);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(ctArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_CT);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(rtArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_RT);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(raArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_RARM);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(llArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_LLEG);
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(rlArmor))
-                    .getTechLevel(getMech().getYear()), Mech.LOC_RLEG);
-            getMech().setArmorType(getArmorType(headArmor), Mech.LOC_HEAD);
-            getMech().setArmorType(getArmorType(laArmor), Mech.LOC_LARM);
-            getMech().setArmorType(getArmorType(ltArmor), Mech.LOC_LT);
-            getMech().setArmorType(getArmorType(ctArmor), Mech.LOC_CT);
-            getMech().setArmorType(getArmorType(rtArmor), Mech.LOC_RT);
-            getMech().setArmorType(getArmorType(raArmor), Mech.LOC_RARM);
-            getMech().setArmorType(getArmorType(llArmor), Mech.LOC_LLEG);
-            getMech().setArmorType(getArmorType(rlArmor), Mech.LOC_RLEG);
-            for (int i = 0; i < getMech().locations(); i++) {
-                int armorCount = 0;
-                switch (getMech().getArmorType(i)) {
-                    case EquipmentType.T_ARMOR_STANDARD:
-                    case EquipmentType.T_ARMOR_HARDENED:
-                    case EquipmentType.T_ARMOR_INDUSTRIAL:
-                    case EquipmentType.T_ARMOR_COMMERCIAL:
-                    case EquipmentType.T_ARMOR_HEAVY_INDUSTRIAL:
-                        armorCount = 0;
-                        break;
-                    case EquipmentType.T_ARMOR_STEALTH:
-                    case EquipmentType.T_ARMOR_FERRO_LAMELLOR:
-                        armorCount = 2;
-                        break;
-                    case EquipmentType.T_ARMOR_HEAVY_FERRO:
-                        armorCount = 3;
-                        break;
-                    case EquipmentType.T_ARMOR_FERRO_FIBROUS:
-                    case EquipmentType.T_ARMOR_REFLECTIVE:
-                    case EquipmentType.T_ARMOR_REACTIVE:
-                        if (TechConstants.isClan(getMech().getArmorTechLevel(i))) {
-                            armorCount = 1;
-                        } else {
-                            armorCount = 2;
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                if (armorCount < 1) {
-                    continue;
-                }
-
-                for (; armorCount > 0; armorCount--) {
-                    try {
-                        getMech().addEquipment(
-                                new Mounted(getMech(),
-                                        EquipmentType.get(EquipmentType
-                                                .getArmorTypeName(
-                                                        getMech().getArmorType(i),
-                                                        getMech().isClan()))), i,
-                                false);
-                    } catch (LocationFullException ex) {
-                        JOptionPane
-                                .showMessageDialog(
-                                        null,
-                                        EquipmentType.getArmorTypeName(getMech()
-                                                .getArmorType(i))
-                                                + " does not fit in location "
-                                                + getMech().getLocationName(i)
-                                                + ". Resetting to Standard Armor in this location.",
-                                        "Error",
-                                        JOptionPane.INFORMATION_MESSAGE);
-                        getMech().setArmorType(EquipmentType.T_ARMOR_STANDARD, i);
-                    }
-                }
-            }
-            if (!getMech().hasPatchworkArmor()) {
-                setArmorType(armorCombo, EquipmentType.T_ARMOR_STANDARD, false);
-            }
+                break;
+        }
+        if (getMech().getEmptyCriticals(location) < crits) {
+            JOptionPane .showMessageDialog(
+                    null, armor.getName()
+                    + " does not fit in location "
+                    + getMech().getLocationName(location)
+                    + ". Resetting to Standard Armor in this location.",
+                    "Error",
+                    JOptionPane.INFORMATION_MESSAGE);
         } else {
-            getMech().setArmorTechLevel(EquipmentType.get(getArmorType(armorCombo))
-                    .getTechLevel(getMech().getYear()));
-            getMech().setArmorType(getArmorType(armorCombo));
-            int armorCount = 0;
-
-            armorCount = EquipmentType.get(getArmorType(armorCombo))
-                    .getCriticals(getMech());
-
-            if (armorCount < 1) {
-                return;
-            }
-            // auto-place stealth crits
-            if (getMech().getArmorType(0) == EquipmentType.T_ARMOR_STEALTH) {
-                Mounted mount = UnitUtil.createSpreadMounts(
-                        getMech(),
-                        EquipmentType.get(EquipmentType.getArmorTypeName(
-                                getMech().getArmorType(0), false)));
-                if (mount == null) {
-                    JOptionPane.showMessageDialog(null,
-                            "Stealth Armor does not fit in location.",
-                            "Resetting to Standard Armor",
-                            JOptionPane.INFORMATION_MESSAGE);
-                    setArmorCombo(EquipmentType.T_ARMOR_STANDARD);
-                    getMech().setArmorTechLevel(EquipmentType.get(
-                            getArmorType(armorCombo)).getTechLevel(
-                            getMech().getYear()));
-                    getMech().setArmorType(getArmorType(armorCombo));
-                }
-            } else {
-                for (; armorCount > 0; armorCount--) {
-                    try {
-                        getMech().addEquipment(new Mounted(getMech(),
-                                EquipmentType.get(getArmorType(armorCombo))),
-                                Entity.LOC_NONE, false);
-                    } catch (Exception ex) {
-                    }
+            getMech().setArmorType(EquipmentType.getArmorType(armor), location);
+            getMech().setArmorTechLevel(armor.getTechLevel(getTechManager().getGameYear(), armor.isClan()));
+            for (; crits > 0; crits--) {
+                try {
+                    getMech().addEquipment( new Mounted(getMech(), armor), location, false);
+                } catch (LocationFullException ex) {
                 }
             }
         }
+        panArmor.refresh();
+        panArmorAllocation.setFromEntity(getMech());
+        refresh.refreshBuild();
+        refresh.refreshPreview();
+        refresh.refreshSummary();
+        refresh.refreshStatus();
     }
 
-    private void setArmorCombo(int type) {
-        armorCombo.setSelectedIndex(-1);
-
-        for (int index = 0; index < armorCombo.getItemCount(); index++) {
-            if (getMech().isMixedTech()) {
-                if (EquipmentType.getArmorTypeName(type,
-                        TechConstants.isClan(getMech().getArmorTechLevel(0)))
-                        .equals(armorCombo.getItemAt(index))) {
-                    armorCombo.setSelectedIndex(index);
-                }
-            } else {
-                if (EquipmentType.getArmorTypeName(type).equals(
-                        armorCombo.getItemAt(index))) {
-                    armorCombo.setSelectedIndex(index);
-                }
-            }
-        }
-    }
-
-    private int getJumpJetType() {
-        int retVal = jjType.getSelectedIndex() + 1;
-        // Hack to hide Disposable Jump Packs
-        if (retVal == jjTypes.length) {
-            retVal++;
-        }
-        return retVal;
-    }
-
-    private String getArmorType(JComboBox<String> combo) {
-        String armorType = combo.getSelectedItem().toString();
-        if (armorType.equals(EquipmentType
-                .getArmorTypeName(EquipmentType.T_ARMOR_PATCHWORK))) {
-            return armorType;
-        }
-        if (!getMech().isMixedTech()) {
-            String prefix = getMech().isClan() ? "Clan " : "IS ";
-            for (int pos = 0; pos < EquipmentType.armorNames.length; pos++) {
-                if (armorType.equals(EquipmentType.armorNames[pos])) {
-                    return prefix + armorType;
-                }
-            }
-        } else {
-            for (int pos = 0; pos < EquipmentType.armorNames.length; pos++) {
-                if (armorType.equals(EquipmentType.getArmorTypeName(pos, true))) {
-                    return armorType;
-                }
-                if (armorType
-                        .equals(EquipmentType.getArmorTypeName(pos, false))) {
-                    return armorType;
-                }
-            }
-        }
-
-        return EquipmentType.getArmorTypeName(EquipmentType.T_ARMOR_STANDARD,
-                getMech().isClan());
-    }
-
-    private void setArmorTonnage() {
-        double armorTons = Math.round(((Double) armorTonnage.getValue()) * 2) / 2.0;
-        getMech().setArmorTonnage(armorTons);
-        armor.resetArmorPoints();
-    }
-
-    private boolean hasTSM() {
-        return ((String) enhancement.getSelectedItem()).contains("TSM");
-    }
-
-    private boolean hasMASC() {
-        return ((String) enhancement.getSelectedItem()).contains("MASC");
-    }
-
-    public void setAsCustomization() {
-        chassis.setEditable(false);
-        chassis.setEnabled(false);
-        weightClass.setEnabled(false);
-        era.setEditable(false);
-        era.setEnabled(false);
-        motiveType.setEnabled(false);
-    }
-
-    private void setHeatSinkCombo() {
-        int selIndex = -1;
-        if (getMech().isMixedTech()) {
-            if (getMech().isClan()) {
-                if (UnitUtil.hasLaserHeatSinks(getMech())) {
-                    selIndex = 3;
-                } else if (getMech().hasCompactHeatSinks()) {
-                    selIndex = 4;
-                } else if (getMech().hasDoubleHeatSinks()) {
-
-                    if (UnitUtil.hasClanDoubleHeatSinks(getMech())) {
-                        selIndex = 1;
-                    } else {
-                        selIndex = 2;
-                    }
-
-                } else {
-                    selIndex = 0;
-                }
-            } else {
-                if (UnitUtil.hasLaserHeatSinks(getMech())) {
-                    selIndex = 3;
-                } else if (getMech().hasCompactHeatSinks()) {
-                    selIndex = 4;
-                } else if (getMech().hasDoubleHeatSinks()) {
-                    if (UnitUtil.hasClanDoubleHeatSinks(getMech())) {
-                        selIndex = 1;
-                    } else {
-                        selIndex = 2;
-                    }
-                } else {
-                    selIndex = 0;
-                }
-            }
-        } else {
-            if (UnitUtil.hasLaserHeatSinks(getMech())) {
-                selIndex = 2;
-            } else if (getMech().hasDoubleHeatSinks()) {
-                if (getMech().hasCompactHeatSinks()) {
-                    selIndex = 2;
-                } else {
-                    selIndex = 1;
-                }
-            } else if (getMech().hasCompactHeatSinks()) {
-                selIndex = 2;
-            } else {
-                selIndex = 0;
-            }
-        }
-        if (heatSinkType.getItemCount() <= selIndex) {
-            selIndex = -1;
-        }
-        heatSinkType.setSelectedIndex(selIndex);
-    }
-
-    private void setArmorType(JComboBox<String> combo, int type,
-            boolean removeListeners) {
-        if (removeListeners) {
-            removeAllListeners();
-        }
-        for (int index = 0; index < combo.getItemCount(); index++) {
-            if (EquipmentType.getArmorTypeName(type).equals(
-                    combo.getItemAt(index))) {
-                armorCombo.setSelectedIndex(index);
-            }
-        }
-        if (removeListeners) {
-            addAllListeners();
-        }
-    }
-
-    public void setArmorType(int type) {
-        setArmorType(armorCombo, type, true);
-    }
-
-    /**
-     * Get a list of the internal structure types legal for this unit
-     *
-     * @return a <code>List<String></code> of the legal IS types, for use in the
-     *         IS combobox
-     */
-    private List<String> getStructureTypes() {
-        List<String> structures = new ArrayList<String>();
-        for (int i = 0; i < EquipmentType.structureNames.length; i++) {
-            // superheavies are restricted to standard, industrial, endo and
-            // endo-composite
-            if (getMech().isSuperHeavy()) {
-                if ((i != EquipmentType.T_STRUCTURE_STANDARD)
-                        && (i != EquipmentType.T_STRUCTURE_INDUSTRIAL)
-                        && (i != EquipmentType.T_STRUCTURE_ENDO_STEEL)
-                        && (i != EquipmentType.T_STRUCTURE_ENDO_COMPOSITE)) {
-                    continue;
-                }
-            }
-            EquipmentType et = EquipmentType.get(EquipmentType
-                    .getStructureTypeName(i, getMech().isClan()));
-            if ((et != null)
-                    && TechConstants
-                            .isLegal(getMech().getTechLevel(),
-                                    et.getTechLevel(getMech().getYear()),
-                                    getMech().isMixedTech())) {
-                structures.add(et.getName());
-            }
-            if (getMech().isMixedTech()) {
-                et = EquipmentType.get(EquipmentType.getStructureTypeName(i,
-                        !getMech().isClan()));
-                if ((et != null)
-                        && TechConstants.isLegal(getMech().getTechLevel(),
-                                et.getTechLevel(getMech().getYear()),
-                                getMech().isMixedTech())) {
-                    structures.add(et.getName()
-                            + (getMech().isClan() ? " (IS)" : " (Clan)"));
-                }
-            }
-        }
-        return structures;
-    }
 }

@@ -97,9 +97,9 @@ public class StatusBar extends ITab {
     public void refresh() {
 
         DecimalFormat roundFormat = new DecimalFormat("#.##");
-        float currentTonnage;
+        double currentTonnage;
         int bv = getInfantry().calculateBattleValue();
-        int currentCost = (int)Math.round(getInfantry().getCost(false));
+        long currentCost = (long) Math.round(getInfantry().getCost(false));
 
         currentTonnage = getInfantry().getWeight();
 

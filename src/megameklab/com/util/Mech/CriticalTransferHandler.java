@@ -35,6 +35,7 @@ import megamek.common.BattleArmor;
 import megamek.common.CriticalSlot;
 import megamek.common.Entity;
 import megamek.common.EquipmentType;
+import megamek.common.LandAirMech;
 import megamek.common.LocationFullException;
 import megamek.common.Mech;
 import megamek.common.MechFileParser;
@@ -118,7 +119,7 @@ public class CriticalTransferHandler extends TransferHandler {
             if (linkedBy != null && !(getUnit() instanceof BattleArmor)) {
                 UnitUtil.removeCriticals(getUnit(), linkedBy);
                 try {
-                    getUnit().addEquipment(linkedBy, mounted.getLocation(), linkedBy.isRearMounted());
+                    UnitUtil.addMounted(getUnit(), linkedBy, mounted.getLocation(), linkedBy.isRearMounted());
                 } catch (LocationFullException e) {
                     UnitUtil.changeMountStatus(getUnit(), linkedBy, Entity.LOC_NONE, Entity.LOC_NONE, false);
                     linkedBy.setLinked(null);
@@ -150,7 +151,9 @@ public class CriticalTransferHandler extends TransferHandler {
             int nextLocation = getUnit().getTransferLocation(location);
             
             // Determine if we should spread equipment over multiple locations
-            if (eq.getType().getCriticals(getUnit()) > primaryLocSpace) {
+            if ((totalCrits > primaryLocSpace)
+                    && !((eq.getType() instanceof MiscType) && eq.getType().hasFlag(MiscType.F_TARGCOMP))
+                    && !(getUnit() instanceof LandAirMech)) {
                 if (location == Mech.LOC_RT) {
                     String[] locations =
                         { "Center Torso", "Right Leg", "Right Arm" };
@@ -247,19 +250,24 @@ public class CriticalTransferHandler extends TransferHandler {
                         + " on " + getUnit().getDisplayName());
             }
 
+            int currLoc = location;
             for (; critsUsed < totalCrits; critsUsed++) {
-                mech.addEquipment(eq, location, false, slotNumber);
+                mech.addEquipment(eq, currLoc, false, slotNumber);
                 slotNumber = 
-                        (slotNumber + 1) % mech.getNumberOfCriticals(location);
+                        (slotNumber + 1) % mech.getNumberOfCriticals(currLoc);
                 primaryLocSpace--;
                 if (primaryLocSpace == 0) {
                     slotNumber = 0;
-                    location = nextLocation;
+                    currLoc = nextLocation;
                     totalCrits -= critsUsed;
                     critsUsed = 0;
                 }
             }
-            changeMountStatus(eq, primaryLocation, nextLocation, false);
+            int secondary = Entity.LOC_NONE;
+            if ((primaryLocSpace <= 0) && (slotNumber > 0)) {
+                secondary = nextLocation;
+            }
+            changeMountStatus(eq, primaryLocation, secondary, false);
         } else if (primaryLocSpace >= totalCrits) {
             if ((eq.getType() instanceof WeaponType) 
                     && eq.getType().hasFlag(WeaponType.F_VGL)) {
@@ -359,10 +367,10 @@ public class CriticalTransferHandler extends TransferHandler {
                         " does not fit in " + getUnit().getLocationAbbr(location) +
                         " on " + getUnit().getDisplayName());
             } else {
-                getUnit().addEquipment(eq, location, false);
+                UnitUtil.addMounted(getUnit(), eq, location, false);
             }
         } else {
-            getUnit().addEquipment(eq, location, false);
+            UnitUtil.addMounted(getUnit(), eq, location, false);
         }
         changeMountStatus(eq, location, false);
         return true;
@@ -410,6 +418,8 @@ public class CriticalTransferHandler extends TransferHandler {
                             || eq.getSecondLocation() != Entity.LOC_NONE){
                         UnitUtil.removeCriticals(getUnit(), eq);
                         changeMountStatus(eq,Entity.LOC_NONE,false);
+                    } else {
+                        eq.setOmniPodMounted(UnitUtil.canPodMount(getUnit(), eq));
                     }
                 }
                 /*if (UnitUtil.isFixedLocationSpreadEquipment(eq.getType())) {
@@ -434,18 +444,18 @@ public class CriticalTransferHandler extends TransferHandler {
                         if ((cs != null) && (cs.getType() == CriticalSlot.TYPE_EQUIPMENT) && (cs.getMount2() == null)) {
                             EquipmentType etype = cs.getMount().getType();
                             EquipmentType etype2 = eq.getType();
-                            if ((etype instanceof AmmoType)) {
-                                if (!(etype2 instanceof AmmoType) || (((AmmoType)etype).getAmmoType() != ((AmmoType)etype2).getAmmoType())) {
-                                    return addEquipmentMech((Mech)getUnit(), eq, slotNumber);
-                                }
-                            } else {
-                                if (!(etype.equals(etype2)) || ((etype instanceof MiscType) && (!etype.hasFlag(MiscType.F_HEAT_SINK) && !etype.hasFlag(MiscType.F_DOUBLE_HEAT_SINK ))) || !((etype instanceof MiscType))) {
-                                    return addEquipmentMech((Mech)getUnit(), eq, slotNumber);
-                                }
+                            boolean canDouble = false;
+                            if ((etype instanceof AmmoType) && (etype2 instanceof AmmoType)) {
+                                canDouble = (((AmmoType)etype).getAmmoType() == ((AmmoType)etype2).getAmmoType())
+                                        && (((AmmoType)etype).getRackSize() == ((AmmoType)etype2).getRackSize());
+                            } else if (etype.equals(etype2) && UnitUtil.isHeatSink(etype)) {
+                                canDouble = etype.getCriticals(getUnit()) == 1;
                             }
-                            cs.setMount2(eq);
-                            changeMountStatus(eq, location, false);
-                            return true;
+                            if (canDouble) {
+                                cs.setMount2(eq);
+                                changeMountStatus(eq, location, false);
+                                return true;
+                            }
                         }
                     }
                     return addEquipmentMech((Mech)getUnit(), eq, slotNumber);
@@ -455,7 +465,6 @@ public class CriticalTransferHandler extends TransferHandler {
 
 
             } catch (LocationFullException lfe) {
-                lfe.printStackTrace();
                 JOptionPane.showMessageDialog(null, lfe.getMessage(), 
                         "Location Full", JOptionPane.INFORMATION_MESSAGE);
                 return false;

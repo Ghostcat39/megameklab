@@ -29,6 +29,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 
 import megamek.common.AmmoType;
+import megamek.common.Entity;
 import megamek.common.Mounted;
 import megamek.common.WeaponType;
 import megamek.common.verifier.EntityVerifier;
@@ -52,7 +53,7 @@ public class StatusBar extends ITab {
     private JLabel tons = new JLabel();
     private JLabel heatSink = new JLabel();
     private JLabel cost = new JLabel();
-    private EntityVerifier entityVerifier = new EntityVerifier(new File(
+    private EntityVerifier entityVerifier = EntityVerifier.getInstance(new File(
             "data/mechfiles/UnitVerifierOptions.xml"));
     private TestAero testAero = null;
     private DecimalFormat formatter;
@@ -104,10 +105,10 @@ public class StatusBar extends ITab {
     public void refresh() {
 
         int heat = getAero().getHeatCapacity();
-        float tonnage = getAero().getWeight();
-        float currentTonnage;
+        double tonnage = getAero().getWeight();
+        double currentTonnage;
         int bv = getAero().calculateBattleValue();
-        int currentCost = (int)Math.round(getAero().getCost(false));
+        long currentCost = (long) Math.round(getAero().getCost(false));
 
         testAero = new TestAero(getAero(), entityVerifier.aeroOption, null);
 
@@ -123,6 +124,7 @@ public class StatusBar extends ITab {
         } else {
             heatSink.setForeground(Color.black);
         }
+        heatSink.setVisible(getAero().getEntityType() == Entity.ETYPE_AERO);
 
         tons.setText("Tonnage: " + currentTonnage + "/" + tonnage);
         tons.setToolTipText("Current Tonnage/Max Tonnage");

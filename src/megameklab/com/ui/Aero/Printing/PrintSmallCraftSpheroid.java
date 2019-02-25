@@ -23,46 +23,38 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.print.PageFormat;
-import java.awt.print.Paper;
 import java.awt.print.Printable;
 import java.awt.print.PrinterException;
-import java.awt.print.PrinterJob;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Vector;
 
-import javax.print.attribute.HashPrintRequestAttributeSet;
-import javax.print.attribute.standard.PrintQuality;
+import com.kitfox.svg.SVGException;
 
 import megamek.common.Aero;
+import megamek.common.Crew;
 import megamek.common.SmallCraft;
+//TODO: uncomment when print issue is fixed and pilot data is ready to position
+//import megamek.common.Crew;
 import megamek.common.TechConstants;
 import megameklab.com.util.ImageHelper;
 import megameklab.com.util.ImageHelperAero;
 import megameklab.com.util.UnitUtil;
 
-import com.kitfox.svg.SVGException;
-
 public class PrintSmallCraftSpheroid implements Printable {
 
     private SmallCraft smallCraft = null;
-    private ArrayList<SmallCraft> smallCraftList;
-    PrinterJob masterPrintJob;
+    // TODO: uncomment when print issue is fixed and pilot data is ready to position
+    // private int topMargin = 6;
+    // private int leftMargin = 11;
 
-    public PrintSmallCraftSpheroid(ArrayList<SmallCraft> list,
-            PrinterJob masterPrintJob) {
-        smallCraftList = list;
-        this.masterPrintJob = masterPrintJob;
-
+    public PrintSmallCraftSpheroid(SmallCraft smallCraft) {
+        this.smallCraft = smallCraft;
     }
 
+    @Override
     public int print(Graphics graphics, PageFormat pageFormat, int pageIndex)
             throws PrinterException {
-        if (pageIndex >= 1) {
-            return Printable.NO_SUCH_PAGE;
-        }
-
         Graphics2D g2d = (Graphics2D) graphics;
         // f.setPaper(this.paper);
         printImage(g2d, pageFormat);
@@ -79,7 +71,7 @@ public class PrintSmallCraftSpheroid implements Printable {
         // g2d.drawImage(ImageHelper.getRecordSheet(smallCraft), 18, 18, 558,
         // 738, Color.BLACK, null);
         try {
-            ImageHelper.loadSVGImage(new File("data/images/recordsheets/SpheroidSmallScraftTemplate.svg")).render(g2d);
+            ImageHelper.loadSVGImage(new File("data/images/recordsheets/SpheroidSmallCraftTemplate.svg")).render(g2d);
         } catch (SVGException e) {
             e.printStackTrace();
         }
@@ -116,13 +108,12 @@ public class PrintSmallCraftSpheroid implements Printable {
         Font font = UnitUtil.deriveFont(8.0f);
         g2d.setFont(font);
 
-        /*
-         * if ((smallCraft.getCrew() != null) &&
-         * !smallCraft.getCrew().getName().equalsIgnoreCase("unnamed")) { Crew
-         * pilot = smallCraft.getCrew(); g2d.drawString(pilot.getName(), 270,
-         * 120); g2d.drawString(String.valueOf(pilot.getGunnery()), 295, 132);
-         * g2d.drawString(String.valueOf(pilot.getPiloting()), 365, 132); }
-         */
+        if ((smallCraft.getCrew() != null) && !smallCraft.getCrew().getName().equalsIgnoreCase("unnamed")) {
+            Crew pilot = smallCraft.getCrew();
+            g2d.drawString(pilot.getName(), 274, 534);
+            g2d.drawString(String.valueOf(pilot.getGunnery()), 302, 547);
+            g2d.drawString(String.valueOf(pilot.getPiloting()), 373, 547);
+        }
 
         g2d.drawString(Integer.toString(smallCraft.getWalkMP()), 102, 142);
         g2d.drawString(Integer.toString(smallCraft.getRunMP()), 102, 152.5f);
@@ -318,39 +309,6 @@ public class PrintSmallCraftSpheroid implements Printable {
 
         ImageHelperAero.printAeroWeaponsNEquipment(smallCraft, g2d);
 
-    }
-
-    public void print(HashPrintRequestAttributeSet aset) {
-
-        try {
-            for (int pos = 0; pos < smallCraftList.size(); pos++) {
-                PrinterJob pj = PrinterJob.getPrinterJob();
-                pj.setPrintService(masterPrintJob.getPrintService());
-
-                aset.add(PrintQuality.HIGH);
-
-                PageFormat pageFormat = new PageFormat();
-                pageFormat = pj.getPageFormat(null);
-
-                Paper p = pageFormat.getPaper();
-                p.setImageableArea(0, 0, p.getWidth(), p.getHeight());
-                pageFormat.setPaper(p);
-
-                pj.setPrintable(this, pageFormat);
-                smallCraft = smallCraftList.get(pos);
-                pj.setJobName(smallCraft.getChassis() + " "
-                        + smallCraft.getModel());
-
-                try {
-                    pj.print(aset);
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-                System.gc();
-            }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
     }
 
     private void printFrontArmor(Graphics2D g2d, int totalArmor) {

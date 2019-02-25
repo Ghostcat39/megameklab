@@ -21,7 +21,10 @@ import javax.swing.JPanel;
 import megamek.common.Aero;
 import megamek.common.BattleArmor;
 import megamek.common.Infantry;
+import megamek.common.Jumpship;
 import megamek.common.Mech;
+import megamek.common.Protomech;
+import megamek.common.SmallCraft;
 import megamek.common.Tank;
 import megamek.common.VTOL;
 import megameklab.com.ui.EntitySource;
@@ -41,6 +44,10 @@ public class IView extends JPanel {
     public Mech getMech() {
         return (Mech) eSource.getEntity();
     }
+    
+    public Protomech getProtomech() {
+        return (Protomech) eSource.getEntity();
+    }
 
     public Tank getTank() {
         return (Tank) eSource.getEntity();
@@ -52,6 +59,14 @@ public class IView extends JPanel {
 
     public Aero getAero() {
         return (Aero) eSource.getEntity();
+    }
+    
+    public SmallCraft getSmallCraft() {
+        return (SmallCraft) eSource.getEntity();
+    }
+    
+    public Jumpship getJumpship() {
+        return (Jumpship) eSource.getEntity();
     }
 
     public BattleArmor getBattleArmor() {

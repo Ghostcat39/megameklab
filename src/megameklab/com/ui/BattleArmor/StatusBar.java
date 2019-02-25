@@ -57,7 +57,7 @@ public class StatusBar extends ITab {
     private JLabel tons = new JLabel();
     private JLabel cost = new JLabel();
     
-    private EntityVerifier entityVerifier = new EntityVerifier(new File(
+    private EntityVerifier entityVerifier = EntityVerifier.getInstance(new File(
             "data/mechfiles/UnitVerifierOptions.xml"));
     
     private TestBattleArmor testBA = null;
@@ -135,10 +135,10 @@ public class StatusBar extends ITab {
 
         int walk = getBattleArmor().getOriginalWalkMP();
         int jump = getBattleArmor().getOriginalJumpMP();
-        float maxKilos = getBattleArmor().getTrooperWeight();
-        float currentKilos;
+        double maxKilos = getBattleArmor().getTrooperWeight();
+        double currentKilos;
         int bv = getBattleArmor().calculateBattleValue();
-        int currentCost = (int)Math.round(getBattleArmor().getCost(false));
+        long currentCost = (long) Math.round(getBattleArmor().getCost(false));
 
         testBA = new TestBattleArmor(getBattleArmor(), entityVerifier.baOption,
                 null);

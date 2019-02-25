@@ -100,6 +100,7 @@ public class BuildTab extends ITab implements ActionListener {
         addAllActionListeners();
     }
 
+    @Override
     public void actionPerformed(ActionEvent e) {
         if (e.getActionCommand().equals(AUTOFILLCOMMAND)) {
             autoFillCrits();
@@ -113,7 +114,7 @@ public class BuildTab extends ITab implements ActionListener {
     private void autoFillCrits() {
 
         for (Mounted mount : buildView.getTableModel().getCrits()) {
-            int externalEngineHS = UnitUtil.getBaseChassisHeatSinks(getMech(), getMech().hasCompactHeatSinks());
+            int externalEngineHS = UnitUtil.getCriticalFreeHeatSinks(getMech(), getMech().hasCompactHeatSinks());
             for (int location = Mech.LOC_HEAD; location < getMech().locations(); location++) {
 
                 if (!UnitUtil.isValidLocation(getMech(), mount.getType(), location)) {
@@ -134,10 +135,10 @@ public class BuildTab extends ITab implements ActionListener {
                 try {
                     if (mount.getType().isSpreadable() || (mount.isSplitable() && (critsUsed > 1))) {
                         for (int count = 0; count < critsUsed; count++) {
-                            getMech().addEquipment(mount, location, false);
+                            UnitUtil.addMounted(getMech(), mount, location, false);
                         }
                     } else {
-                        getMech().addEquipment(mount, location, false);
+                        UnitUtil.addMounted(getMech(), mount, location, false);
                     }
                     UnitUtil.changeMountStatus(getMech(), mount, location, Entity.LOC_NONE, false);
                     break;

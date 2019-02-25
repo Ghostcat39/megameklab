@@ -60,7 +60,21 @@ public class CConfig {
     public static final String CONFIG_EMPTY_FOREGROUND = "Empty-Foreground";
     public static final String CONFIG_EMPTY_BACKGROUND = "Empty-Background";
     
+    public static final String TECH_PROGRESSION = "techProgression";
+    public static final String TECH_USE_YEAR = "techUseYear";
+    public static final String TECH_YEAR = "techYear";
+    public static final String TECH_SHOW_FACTION = "techShowFaction";
+    public static final String TECH_EXTINCT = "techShowExtinct";
+    public static final String TECH_UNOFFICAL_NO_YEAR = "techUnofficialNoYear";
+    
+    public static final String SUMMARY_FORMAT_TRO = "useTROFormat";
+    
     public static final String CONFIG_SAVE_LOC = "Save-Location-Default";
+    public static final String CONFIG_PLAF = "lookAndFeel";
+    
+    public static final String RS_SHOW_QUIRKS = "rs_show_quirks";
+    public static final String RS_SHOW_PILOT_DATA = "rs_show_pilot_data";
+    public static final String RS_SHOW_ERA = "rs_show_era";
 
     private static Properties config;// config. player values.
 
@@ -98,6 +112,10 @@ public class CConfig {
         defaults.setProperty(CONFIG_SAVE_LOC,
                 new File(System.getProperty("user.dir").toString()
                         + "/data/mechfiles/").getAbsolutePath());
+        defaults.setProperty(SUMMARY_FORMAT_TRO, Boolean.toString(true));
+        defaults.setProperty(RS_SHOW_QUIRKS, Boolean.toString(true));
+        defaults.setProperty(RS_SHOW_ERA, Boolean.toString(true));
+        defaults.setProperty(RS_SHOW_PILOT_DATA, Boolean.toString(true));
 
         return defaults;
     }
@@ -155,9 +173,13 @@ public class CConfig {
     }
 
     /**
-     * Get a config value.
+     * Get a config value, with a default value to be used if the value is not found.
+     * 
+     * @param param      The key
+     * @param defaultVal The value to return if the entry is not found
+     * @return           The value associated with the key
      */
-    public static String getParam(String param) {
+    public static String getParam(String param, String defaultVal) {
         String tparam = null;
 
         if (param.endsWith(":")) {
@@ -165,9 +187,19 @@ public class CConfig {
         }
         tparam = config.getProperty(param);
         if (tparam == null) {
-            tparam = "";
+            tparam = defaultVal;
         }
         return tparam;
+    }
+    
+    /**
+     * Get a config value.
+     * 
+     * @param param      The key
+     * @return           The value associated with the key. If not found, an empty String is returned
+     */
+    public static String getParam(String param) {
+        return getParam(param, "");
     }
 
     /**
@@ -198,6 +230,20 @@ public class CConfig {
             toReturn = Integer.parseInt(CConfig.getParam(param));
         } catch (Exception ex) {
             return 0;
+        }
+        return toReturn;
+    }
+
+    /**
+     * Return the boolean value of a given config property. Return a false if the
+     * property does not exist.
+     */
+    public static boolean getBooleanParam(String param) {
+        boolean toReturn;
+        try {
+            toReturn = Boolean.parseBoolean(CConfig.getParam(param));
+        } catch (Exception ex) {
+            return false;
         }
         return toReturn;
     }

@@ -46,11 +46,11 @@ import megamek.common.weapons.Weapon;
 import megameklab.com.ui.EntitySource;
 import megameklab.com.ui.Aero.tabs.BuildTab;
 import megameklab.com.util.CriticalTableModel;
+import megameklab.com.util.CriticalTransferHandler;
 import megameklab.com.util.IView;
 import megameklab.com.util.RefreshListener;
 import megameklab.com.util.StringUtils;
 import megameklab.com.util.UnitUtil;
-import megameklab.com.util.CriticalTransferHandler;
 
 /**
  * This IView shows all the equipment that's not yet been assigned a location
@@ -122,16 +122,13 @@ public class BuildView extends IView implements ActionListener, MouseListener {
                 masterEquipmentList.add(mount);
             }
         }
-        for (Mounted mount : getAero().getWeaponList()) {
+        for (Mounted mount : getAero().getTotalWeaponList()) {
             if (mount.getLocation() == Entity.LOC_NONE) {
                 masterEquipmentList.add(mount);
             }
         }
         for (Mounted mount : getAero().getAmmo()) {
-            if ((mount.getLocation() == Entity.LOC_NONE) && 
-                    ((mount.getUsableShotsLeft() > 1) || 
-                            (((AmmoType)mount.getType()).getAmmoType() == 
-                                AmmoType.T_COOLANT_POD))) {
+            if ((mount.getLocation() == Entity.LOC_NONE) && !mount.isOneShotAmmo()) {
                 masterEquipmentList.add(mount);
             }
         }
@@ -245,6 +242,7 @@ public class BuildView extends IView implements ActionListener, MouseListener {
     private void addAllListeners() {
     }
 
+    @Override
     public void actionPerformed(ActionEvent e) {
         fireTableRefresh();
     }
@@ -262,18 +260,22 @@ public class BuildView extends IView implements ActionListener, MouseListener {
         return equipmentTable;
     }
 
+    @Override
     public void mouseClicked(MouseEvent e) {
 
     }
 
+    @Override
     public void mouseEntered(MouseEvent e) {
 
     }
 
+    @Override
     public void mouseExited(MouseEvent e) {
 
     }
 
+    @Override
     public void mousePressed(MouseEvent e) {
         // On right-click, we want to generate menu items to add to specific 
         //  locations, but only if those locations are make sense
@@ -288,11 +290,11 @@ public class BuildView extends IView implements ActionListener, MouseListener {
             String[] locNames = getAero().getLocationNames();
             // A list of the valid locations we can add the selected eq to
             ArrayList<Integer> validLocs = new ArrayList<Integer>();
-            // The number of possible locations, Aeros' have LOC_WINGS, which we
-            //  want ot ignore, hence -1
-            int numLocs = getAero().locations() - 1;
+            // The number of possible locations, Aeros' have LOC_WINGS and LOC_FUSELAGE, which we
+            //  want ot ignore for now, hence -2
+            int numLocs = getAero().locations() - 2;
             // If it's a weapon, there are restrictions
-            if (eq.getType() instanceof WeaponType){
+            if (eq.getType() instanceof WeaponType) {
                 int[] availSpace = TestAero.availableSpace(getAero()); 
                 int numWeapons[] = new int[availSpace.length];
                 
@@ -310,7 +312,10 @@ public class BuildView extends IView implements ActionListener, MouseListener {
             } else {
                 for (int loc = 0; loc < numLocs; loc++){                    
                         validLocs.add(loc);
-                } 
+                }
+                if (!UnitUtil.isWeaponEnhancement(eq.getType())) {
+                    validLocs.add(Aero.LOC_FUSELAGE);
+                }
             }
             
             // Add a menu item for each potential location
@@ -320,6 +325,7 @@ public class BuildView extends IView implements ActionListener, MouseListener {
 
                     final int loc = location;
                     item.addActionListener(new ActionListener() {
+                        @Override
                         public void actionPerformed(ActionEvent e) {
                             jMenuLoadComponent_actionPerformed(loc, selectedRow);
                         }
@@ -331,6 +337,7 @@ public class BuildView extends IView implements ActionListener, MouseListener {
         }
     }
 
+    @Override
     public void mouseReleased(MouseEvent e) {
 
     }

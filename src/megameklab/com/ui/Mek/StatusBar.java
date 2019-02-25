@@ -57,7 +57,7 @@ public class StatusBar extends ITab {
     private JLabel tons = new JLabel();
     private JLabel heatSink = new JLabel();
     private JLabel cost = new JLabel();
-    private EntityVerifier entityVerifier = new EntityVerifier(new File("data/mechfiles/UnitVerifierOptions.xml"));
+    private EntityVerifier entityVerifier = EntityVerifier.getInstance(new File("data/mechfiles/UnitVerifierOptions.xml"));
     private TestMech testEntity = null;
     private DecimalFormat formatter;
     private JFrame parentFrame;
@@ -110,8 +110,8 @@ public class StatusBar extends ITab {
     public void refresh() {
 
         int heat = getMech().getHeatCapacity();
-        float tonnage = getMech().getWeight();
-        float currentTonnage;
+        double tonnage = getMech().getWeight();
+        double currentTonnage;
         int bv = getMech().calculateBattleValue();
         int maxCrits;
         if (getMech() instanceof TripodMech) {
@@ -122,7 +122,7 @@ public class StatusBar extends ITab {
             maxCrits = 78;
         }
         int currentCrits = UnitUtil.countUsedCriticals(getMech());
-        int currentCost = (int)Math.round(getMech().getCost(false));
+        long currentCost = (long) Math.round(getMech().getCost(false));
 
         testEntity = new TestMech(getMech(), entityVerifier.mechOption, null);
 

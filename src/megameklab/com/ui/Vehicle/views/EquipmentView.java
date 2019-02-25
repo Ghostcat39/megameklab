@@ -133,7 +133,7 @@ public class EquipmentView extends IView implements ActionListener {
         equipmentTypes = new Vector<EquipmentType>();
 
         for (EquipmentType eq : masterEquipmentList) {
-            if (UnitUtil.isLegal(getTank(), eq.getTechLevel(getTank().getTechLevelYear()))) {
+            if (UnitUtil.isLegal(getTank(), eq)) {
                 equipmentTypes.add(eq);
                 equipmentCombo.addItem(eq);
             }
@@ -217,6 +217,7 @@ public class EquipmentView extends IView implements ActionListener {
         removeAllButton.setMnemonic('L');
     }
 
+    @Override
     public void actionPerformed(ActionEvent e) {
 
         if (e.getActionCommand().equals(ADD_COMMAND)) {

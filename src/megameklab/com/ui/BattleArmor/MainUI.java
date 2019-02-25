@@ -30,11 +30,13 @@ import megamek.common.BattleArmor;
 import megamek.common.Entity;
 import megamek.common.EntityWeightClass;
 import megamek.common.EquipmentType;
+import megamek.common.ITechManager;
 import megamek.common.TechConstants;
 import megameklab.com.ui.MegaMekLabMainUI;
 import megameklab.com.ui.BattleArmor.tabs.BuildTab;
 import megameklab.com.ui.BattleArmor.tabs.EquipmentTab;
 import megameklab.com.ui.BattleArmor.tabs.StructureTab;
+import megameklab.com.ui.tabs.FluffTab;
 import megameklab.com.util.MenuBarCreator;
 import megameklab.com.util.UnitUtil;
 
@@ -50,6 +52,7 @@ public class MainUI extends MegaMekLabMainUI {
     private StructureTab structureTab;
     private BuildTab buildTab;
     private EquipmentTab equipTab;
+    private FluffTab fluffTab;
     private StatusBar statusbar;
     JPanel masterPanel = new JPanel();
     JScrollPane scroll = new JScrollPane();
@@ -59,7 +62,7 @@ public class MainUI extends MegaMekLabMainUI {
 
         super();
         // ConfigPane.setMinimumSize(new Dimension(300, 300));
-        createNewUnit(Entity.ETYPE_BATTLEARMOR, false);
+        createNewUnit(Entity.ETYPE_BATTLEARMOR);
         setTitle(getEntity().getChassis() + " " + getEntity().getModel() + ".blk");
         menubarcreator = new MenuBarCreator(this);
         setJMenuBar(menubarcreator);
@@ -85,16 +88,19 @@ public class MainUI extends MegaMekLabMainUI {
         masterPanel.setLayout(new BorderLayout());
         structureTab = new StructureTab(this);
         equipTab = new EquipmentTab(this);
+        fluffTab = new FluffTab(this);
 
         statusbar = new StatusBar(this);
         buildTab = new BuildTab(this);
         structureTab.addRefreshedListener(this);
         equipTab.addRefreshedListener(this);
         buildTab.addRefreshedListener(this);
+        fluffTab.setRefreshedListener(this);
 
         ConfigPane.addTab("Structure/Armor", structureTab);
         ConfigPane.addTab("Equipment", equipTab);
         ConfigPane.addTab("Assign Criticals", buildTab);
+        ConfigPane.addTab("Fluff", fluffTab);
 
         masterPanel.add(ConfigPane, BorderLayout.CENTER);
         masterPanel.add(statusbar, BorderLayout.SOUTH);
@@ -104,7 +110,7 @@ public class MainUI extends MegaMekLabMainUI {
     }
 
     @Override
-    public void createNewUnit(long entityType, boolean isSuperHeavy) {
+    public void createNewUnit(long entityType, boolean isPrimitive, boolean isIndustrial, Entity oldEntity) {
         setEntity(new BattleArmor());
         BattleArmor ba = (BattleArmor) getEntity();
 
@@ -149,6 +155,11 @@ public class MainUI extends MegaMekLabMainUI {
     public void refreshEquipment() {
         equipTab.refresh();
     }
+    
+    @Override
+    public void refreshTransport() {
+        // not used for ba
+    }
 
     @Override
     public void refreshHeader() {
@@ -182,6 +193,23 @@ public class MainUI extends MegaMekLabMainUI {
     @Override
     public void refreshPreview() {
         structureTab.refreshPreview();
+    }
+    
+    @Override
+    public void refreshSummary() {
+    }
+    
+    @Override
+    public void refreshEquipmentTable() {
+        equipTab.refreshTable();
+    }
+
+    @Override
+    public ITechManager getTechManager() {
+        if (structureTab != null) {
+            return structureTab.getTechManager();
+        }
+        return null;
     }
 
 }
